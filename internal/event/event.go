@@ -1,5 +1,6 @@
 // Package event turns a stream of samples into hardware state-transition events.
-// It is deterministic and hardware-free: give it samples, get events.
+// It is deterministic and hardware-free: give it samples, get events. Timestamps
+// are derived from the samples themselves, never from the wall clock.
 package event
 
 import (
@@ -10,39 +11,49 @@ import (
 )
 
 type ruleState struct {
-	rule       config.Rule
-	active     bool
-	breachRun  int
-	clearRun   int
-	seq        uint64
-	startedAt  time.Time
+	rule      config.Rule
+	enterFor  int
+	exitFor   int
+	active    bool
+	breachRun int
+	clearRun  int
+	seq       uint64
+	startedAt time.Time
 }
 
 // Engine evaluates rules against samples, holding per-rule hysteresis state.
+// Evaluate is deterministic: the same samples always yield the same events in a
+// stable order (samples outer, rules in construction order inner).
 type Engine struct {
 	node  string
-	rules map[string]*ruleState // key: condition
+	rules []*ruleState
 }
 
+// NewEngine builds an engine with one independent state slot per rule, in the
+// order given. EnterFor/ExitFor below 1 are clamped to 1.
 func NewEngine(node string, rules []config.Rule) *Engine {
-	m := make(map[string]*ruleState, len(rules))
+	states := make([]*ruleState, 0, len(rules))
 	for _, r := range rules {
-		m[r.Condition] = &ruleState{rule: r}
+		states = append(states, &ruleState{
+			rule:     r,
+			enterFor: max1(r.EnterFor),
+			exitFor:  max1(r.ExitFor),
+		})
 	}
-	return &Engine{node: node, rules: m}
+	return &Engine{node: node, rules: states}
 }
 
 // Evaluate returns any state-transition events triggered by these samples.
+// Event timestamps are taken from the triggering sample's Timestamp, so the
+// function is pure with respect to its inputs.
 func (e *Engine) Evaluate(samples []model.Sample) []model.Event {
 	var out []model.Event
-	now := time.Now().UTC()
 	for _, s := range samples {
 		for _, st := range e.rules {
 			if st.rule.Metric != s.Metric || st.rule.Device != s.Device {
 				continue
 			}
-			breached := s.Value > st.rule.Threshold
-			if breached {
+			if s.Value > st.rule.Threshold {
 				st.breachRun++
 				st.clearRun = 0
 			} else {
@@ -50,27 +61,25 @@ func (e *Engine) Evaluate(samples []model.Sample) []model.Event {
 				st.breachRun = 0
 			}
 
-			enterFor := max1(st.rule.EnterFor)
-			exitFor := max1(st.rule.ExitFor)
-
-			if !st.active && st.breachRun >= enterFor {
+			switch {
+			case !st.active && st.breachRun >= st.enterFor:
 				st.active = true
 				st.seq++
-				st.startedAt = now
+				st.startedAt = s.Timestamp
 				out = append(out, model.Event{
 					Node: e.node, Tier: s.Tier, Device: s.Device,
 					Condition: st.rule.Condition, Phase: model.PhaseEnter,
-					Severity: st.rule.Severity, Seq: st.seq, StartedAt: now,
+					Severity: st.rule.Severity, Seq: st.seq, StartedAt: s.Timestamp,
 					Detail: map[string]any{"value": s.Value, "threshold": st.rule.Threshold},
 				})
-			} else if st.active && st.clearRun >= exitFor {
+			case st.active && st.clearRun >= st.exitFor:
 				st.active = false
 				st.seq++
 				out = append(out, model.Event{
 					Node: e.node, Tier: s.Tier, Device: s.Device,
 					Condition: st.rule.Condition, Phase: model.PhaseExit,
 					Severity: st.rule.Severity, Seq: st.seq,
-					StartedAt: st.startedAt, EndedAt: now,
+					StartedAt: st.startedAt, EndedAt: s.Timestamp,
 					Detail: map[string]any{"value": s.Value, "threshold": st.rule.Threshold},
 				})
 			}
