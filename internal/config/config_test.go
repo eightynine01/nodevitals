@@ -51,6 +51,19 @@ sinks:
 	if !c.Sinks.Metrics.Enabled {
 		t.Fatal("metrics should be enabled")
 	}
+	if c.ProcRoot != "/custom/proc" {
+		t.Fatalf("procRoot = %q, want /custom/proc", c.ProcRoot)
+	}
+	r := c.Rules[0]
+	if r.Device != "cpu" || r.Condition != "load_high" || r.Severity != "warning" || r.EnterFor != 2 || r.ExitFor != 2 {
+		t.Fatalf("rule fields not fully parsed: %+v", r)
+	}
+	if c.Sinks.Webhook[0].Secret != "shh" {
+		t.Fatalf("webhook secret = %q, want shh", c.Sinks.Webhook[0].Secret)
+	}
+	if c.Sinks.Metrics.ListenAddr != ":9847" {
+		t.Fatalf("metrics listenAddr = %q, want :9847", c.Sinks.Metrics.ListenAddr)
+	}
 }
 
 func TestLoadDefaultsProcRootAndInterval(t *testing.T) {

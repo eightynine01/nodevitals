@@ -9,6 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Rule defines a threshold-based state-transition condition.
 type Rule struct {
 	Metric    string  `yaml:"metric"`
 	Device    string  `yaml:"device"`
@@ -19,21 +20,25 @@ type Rule struct {
 	ExitFor   int     `yaml:"exitFor"`
 }
 
+// WebhookConfig is one customer backend webhook endpoint.
 type WebhookConfig struct {
 	URL    string `yaml:"url"`
 	Secret string `yaml:"secret"`
 }
 
+// MetricsConfig configures the Prometheus /metrics endpoint.
 type MetricsConfig struct {
 	Enabled    bool   `yaml:"enabled"`
 	ListenAddr string `yaml:"listenAddr"`
 }
 
+// SinksConfig groups the configured delivery sinks.
 type SinksConfig struct {
 	Webhook []WebhookConfig `yaml:"webhook"`
 	Metrics MetricsConfig   `yaml:"metrics"`
 }
 
+// Config is the nodevitals agent configuration.
 type Config struct {
 	Node            string      `yaml:"node"`
 	Tier            string      `yaml:"tier"`
