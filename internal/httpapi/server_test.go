@@ -27,6 +27,9 @@ func TestStateEndpointReturnsSnapshot(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", ct)
+	}
 	var got []model.Sample
 	json.NewDecoder(resp.Body).Decode(&got)
 	if len(got) != 1 || got[0].Metric != "load1" {
