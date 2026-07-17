@@ -38,7 +38,7 @@ type Event struct {
 	Severity  string         `json:"severity"`
 	Seq       uint64         `json:"seq"`
 	StartedAt time.Time      `json:"started_at"`
-	EndedAt   time.Time      `json:"ended_at,omitempty"`
+	EndedAt   time.Time      `json:"ended_at,omitzero"`
 	Detail    map[string]any `json:"detail,omitempty"`
 }
 
