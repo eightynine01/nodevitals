@@ -2,6 +2,7 @@ package collector
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -9,18 +10,20 @@ import (
 )
 
 // fakeReader is a hand-written gpuReader test double — no go-nvml, no
-// hardware. Read returns a canned snapshot; XidEvents returns a
-// test-controlled channel the test pushes xidRaw values to (and closes).
+// hardware. Read returns a canned snapshot (or readErr, to exercise the
+// error path); XidEvents returns a test-controlled channel the test pushes
+// xidRaw values to (and closes).
 type fakeReader struct {
 	devices []gpuDevice
 	xidCh   chan xidRaw
+	readErr error
 }
 
 func newFakeReader(devices []gpuDevice) *fakeReader {
 	return &fakeReader{devices: devices, xidCh: make(chan xidRaw)}
 }
 
-func (f *fakeReader) Read(ctx context.Context) ([]gpuDevice, error) { return f.devices, nil }
+func (f *fakeReader) Read(ctx context.Context) ([]gpuDevice, error) { return f.devices, f.readErr }
 func (f *fakeReader) XidEvents() <-chan xidRaw                      { return f.xidCh }
 func (f *fakeReader) Close() error                                  { return nil }
 
@@ -119,10 +122,61 @@ func TestGPUCollectZeroDevicesYieldsZeroSamplesNoError(t *testing.T) {
 	}
 }
 
+// TestGPUCollectWrapsReaderError mirrors smart.go's TestSmartCollectWrapsProbeError:
+// a reader failure must surface as a wrapped error that errors.Is can unwrap,
+// so callers can distinguish a GPU-read failure from an empty node.
+func TestGPUCollectWrapsReaderError(t *testing.T) {
+	sentinel := errors.New("nvml init failed")
+	r := &fakeReader{xidCh: make(chan xidRaw), readErr: sentinel}
+	c := NewGPUCollector("test-node", r)
+
+	_, err := c.Collect(context.Background())
+	if err == nil {
+		t.Fatal("Collect should propagate the reader error, got nil")
+	}
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("Collect error = %v, want it to wrap %v (errors.Is)", err, sentinel)
+	}
+}
+
+// TestGPUCollectMultipleDevices covers the primary real-world case — a
+// multi-GPU node — asserting each device's samples carry its own gpu<Index>
+// device label and value, not just a single-device happy path.
+func TestGPUCollectMultipleDevices(t *testing.T) {
+	r := newFakeReader([]gpuDevice{
+		{Index: 0, UtilGPU: 10},
+		{Index: 1, UtilGPU: 20},
+	})
+	c := NewGPUCollector("test-node", r)
+
+	got, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	if len(got) != 14 {
+		t.Fatalf("want 14 samples (7 metrics × 2 devices), got %d", len(got))
+	}
+
+	util := map[string]float64{}
+	for _, s := range got {
+		if s.Metric == "gpu_utilization_pct" {
+			util[s.Device] = s.Value
+		}
+	}
+	if util["gpu0"] != 10 {
+		t.Fatalf("gpu0 utilization = %v, want 10", util["gpu0"])
+	}
+	if util["gpu1"] != 20 {
+		t.Fatalf("gpu1 utilization = %v, want 20", util["gpu1"])
+	}
+}
+
 func TestGPUEventsClassifiesXidToModelEvent(t *testing.T) {
 	r := newFakeReader(nil)
 	c := NewGPUCollector("test-node", r)
-	events := c.Events()
+	// The agent reaches XID events by type-asserting the registered Collector
+	// to EventSource — exercise that same path here, not a concrete shortcut.
+	events := c.(EventSource).Events()
 
 	r.xidCh <- xidRaw{DeviceIndex: 0, Xid: 79}
 	ev := recvEvent(t, events)

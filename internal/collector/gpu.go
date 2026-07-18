@@ -60,7 +60,7 @@ type gpuCollector struct {
 // model.Event on the channel Events() returns. Both the goroutine and the
 // Events() channel end when r.XidEvents() closes — the reader owns closing
 // it, mirroring how smartProbe owns the fake in smart tests.
-func NewGPUCollector(node string, r gpuReader) *gpuCollector {
+func NewGPUCollector(node string, r gpuReader) Collector {
 	c := &gpuCollector{node: node, reader: r, events: make(chan model.Event)}
 	go func() {
 		defer close(c.events)
@@ -99,9 +99,10 @@ func (c *gpuCollector) Collect(ctx context.Context) ([]model.Sample, error) {
 	return out, nil
 }
 
-// Events returns the channel of classified XID events wired at construction.
-// It is safe to call more than once — every call returns the same channel
-// (the EventSource shape a later task adds to collector.go expects this).
+// Events returns the channel of classified XID events wired at construction,
+// satisfying collector.EventSource. It is safe to call more than once — every
+// call returns the same channel — and the agent reaches it by type-asserting
+// the registered Collector to EventSource.
 func (c *gpuCollector) Events() <-chan model.Event { return c.events }
 
 // toEvent transforms one raw XID into a model.Event shaped exactly like the
