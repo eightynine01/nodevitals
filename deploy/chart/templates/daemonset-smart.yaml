@@ -55,6 +55,12 @@ spec:
             httpGet:
               path: /healthz
               port: metrics
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            periodSeconds: 10
+            failureThreshold: 3
       volumes:
         - name: dev
           hostPath:
