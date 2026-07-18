@@ -35,6 +35,28 @@ func TestMetricsExposesLatestSample(t *testing.T) {
 	}
 }
 
+func TestMetricsExposesCounterWithTotalNameAndType(t *testing.T) {
+	m := NewMetrics()
+	m.Update([]model.Sample{
+		{Node: "n1", Tier: "core", Device: "eth0", Metric: "net_rx_bytes_total", Kind: model.KindCounter, Value: 5000},
+	})
+	srv := httptest.NewServer(m.Handler())
+	defer srv.Close()
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	body := string(raw)
+	if !strings.Contains(body, "# TYPE nodevitals_hw_net_rx_bytes_total counter") {
+		t.Fatalf("counter TYPE declaration missing:\n%s", body)
+	}
+	if !strings.Contains(body, `nodevitals_hw_net_rx_bytes_total{device="eth0"`) {
+		t.Fatalf("counter sample line missing:\n%s", body)
+	}
+}
+
 func TestMetricsUpdateReplacesSnapshot(t *testing.T) {
 	m := NewMetrics()
 	m.Update([]model.Sample{{Node: "n", Tier: "core", Device: "cpu", Metric: "load1", Value: 1}})

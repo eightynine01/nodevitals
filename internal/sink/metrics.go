@@ -38,14 +38,16 @@ func (m *Metrics) Collect(ch chan<- prometheus.Metric) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for _, s := range m.snapshot {
+		vt := prometheus.GaugeValue
+		if s.Kind == model.KindCounter {
+			vt = prometheus.CounterValue
+		}
 		desc := prometheus.NewDesc(
 			"nodevitals_hw_"+s.Metric,
 			"nodevitals hardware metric "+s.Metric,
 			[]string{"node", "tier", "device"}, nil,
 		)
-		ch <- prometheus.MustNewConstMetric(
-			desc, prometheus.GaugeValue, s.Value, s.Node, s.Tier, s.Device,
-		)
+		ch <- prometheus.MustNewConstMetric(desc, vt, s.Value, s.Node, s.Tier, s.Device)
 	}
 }
 

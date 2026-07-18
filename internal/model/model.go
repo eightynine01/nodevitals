@@ -16,12 +16,21 @@ const (
 	SevCritical = "critical"
 )
 
+// Sample kinds. KindGauge (the zero value) is a point-in-time reading.
+// KindCounter marks a cumulative, monotonically increasing value; the metrics
+// sink exposes it as a Prometheus counter (names carry a _total suffix).
+const (
+	KindGauge   = ""
+	KindCounter = "counter"
+)
+
 // Sample is one hardware measurement.
 type Sample struct {
 	Node      string            `json:"node"`
 	Tier      string            `json:"tier"`
 	Device    string            `json:"device"`
 	Metric    string            `json:"metric"`
+	Kind      string            `json:"kind,omitempty"`
 	Value     float64           `json:"value"`
 	Labels    map[string]string `json:"labels,omitempty"`
 	Timestamp time.Time         `json:"timestamp"`

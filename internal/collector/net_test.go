@@ -3,6 +3,8 @@ package collector
 import (
 	"context"
 	"testing"
+
+	"github.com/KeiaiLab/nodevitals/internal/model"
 )
 
 func TestNetReadsFixtureSkipsLoopback(t *testing.T) {
@@ -17,14 +19,17 @@ func TestNetReadsFixtureSkipsLoopback(t *testing.T) {
 			byDev[s.Device] = map[string]float64{}
 		}
 		byDev[s.Device][s.Metric] = s.Value
+		if s.Device == "eth0" && s.Kind != model.KindCounter {
+			t.Fatalf("eth0 sample %s must be KindCounter, got %q", s.Metric, s.Kind)
+		}
 	}
 	if _, ok := byDev["lo"]; ok {
 		t.Fatal("loopback must be skipped")
 	}
-	if byDev["eth0"]["net_rx_bytes"] != 5000 || byDev["eth0"]["net_tx_bytes"] != 6000 {
+	if byDev["eth0"]["net_rx_bytes_total"] != 5000 || byDev["eth0"]["net_tx_bytes_total"] != 6000 {
 		t.Fatalf("eth0 bytes wrong: %+v", byDev["eth0"])
 	}
-	if byDev["eth0"]["net_rx_errors"] != 2 || byDev["eth0"]["net_tx_errors"] != 1 {
+	if byDev["eth0"]["net_rx_errors_total"] != 2 || byDev["eth0"]["net_tx_errors_total"] != 1 {
 		t.Fatalf("eth0 errors wrong: %+v", byDev["eth0"])
 	}
 }

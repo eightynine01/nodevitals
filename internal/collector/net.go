@@ -35,11 +35,11 @@ func (c *netCollector) Collect(ctx context.Context) ([]model.Sample, error) {
 			continue
 		}
 		mk := func(metric string, v uint64) model.Sample {
-			return model.Sample{Node: c.node, Tier: "core", Device: iface, Metric: metric, Value: float64(v), Timestamp: now}
+			return model.Sample{Node: c.node, Tier: "core", Device: iface, Metric: metric, Kind: model.KindCounter, Value: float64(v), Timestamp: now}
 		}
 		out = append(out,
-			mk("net_rx_bytes", line.RxBytes), mk("net_tx_bytes", line.TxBytes),
-			mk("net_rx_errors", line.RxErrors), mk("net_tx_errors", line.TxErrors))
+			mk("net_rx_bytes_total", line.RxBytes), mk("net_tx_bytes_total", line.TxBytes),
+			mk("net_rx_errors_total", line.RxErrors), mk("net_tx_errors_total", line.TxErrors))
 	}
 	return out, nil
 }
