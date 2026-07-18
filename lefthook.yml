@@ -1,0 +1,29 @@
+# Local CI gates. Governance forbids GitHub Actions (see docs/kb/adr/0002), so the
+# quality gates run as git hooks instead of a remote pipeline.
+#
+# Activate once per clone:   lefthook install
+# Emergency bypass:          LEFTHOOK=0 git push
+#
+# pre-commit is fast (formatting only); pre-push runs the full gate set. The chart
+# gates run only when deploy/chart/** changed, so a Go-only push needs no helm.
+
+pre-commit:
+  parallel: true
+  commands:
+    fmt:
+      glob: "*.go"
+      run: make fmt
+
+pre-push:
+  parallel: false
+  commands:
+    vet:
+      run: make vet
+    test-race:
+      run: go test -race ./...
+    chart-lint:
+      glob: "deploy/chart/**"
+      run: make chart-lint
+    chart-test:
+      glob: "deploy/chart/**"
+      run: make chart-test

@@ -48,7 +48,8 @@ It does **not** try to be a dashboard — you keep your own Grafana/backend. It 
 ## Architecture
 
 The pipeline is deliberately linear and each stage is independently testable — the whole thing
-runs with zero real hardware in CI, using fixture filesystems and mocks:
+runs with zero real hardware (fixture filesystems and mocks), so the local pre-push gate is a
+fast `go test`:
 
 ```mermaid
 flowchart LR
@@ -192,7 +193,18 @@ glibc (cc-debian12) base for the cgo/NVML binding.
 Issues and pull requests are welcome. The codebase is small, fully unit-tested without
 hardware, and follows a strict collect → event → sink layering — see the
 [design doc](docs/superpowers/specs/2026-07-17-nodevitals-design.md) before adding a
-collector or sink. Please run `make all` before opening a PR.
+collector or sink.
+
+Quality gates run as **git hooks** ([lefthook](https://github.com/evilmartians/lefthook)),
+not a remote CI pipeline ([ADR-0002](docs/kb/adr/0002-supply-chain-and-release.md)). Activate
+them once after cloning:
+
+```bash
+lefthook install     # pre-commit: gofmt · pre-push: go vet + go test -race + helm/kubeconform + chart-test
+```
+
+`make all` runs the same Go gates by hand. The chart gates fire only when `deploy/chart/**`
+changes; bypass in an emergency with `LEFTHOOK=0 git push`.
 
 ## License
 
