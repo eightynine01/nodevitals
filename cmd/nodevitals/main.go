@@ -3,12 +3,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/nodevitals/nodevitals/internal/agent"
 	"github.com/nodevitals/nodevitals/internal/collector"
@@ -49,9 +51,15 @@ func main() {
 	if listen == "" {
 		listen = ":9847"
 	}
-	srv := &http.Server{Addr: listen, Handler: mux}
+	srv := &http.Server{
+		Addr:              listen,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+	}
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("http server", "err", err)
 		}
 	}()
@@ -61,5 +69,9 @@ func main() {
 	slog.Info("nodevitals started", "node", cfg.Node, "tier", cfg.Tier, "listen", listen)
 	a.Run(ctx)
 
-	_ = srv.Shutdown(context.Background())
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("http shutdown", "err", err)
+	}
 }
