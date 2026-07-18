@@ -142,12 +142,14 @@ can verify them.
 
 ```bash
 make all         # go vet + go test + build
-make docker      # build the distroless/static image (~22 MB)
+make docker      # build the distroless/static image (~22 MB) — core & smart tiers
+make build-gpu   # build the glibc :v-gpu image (GPU tier — go-nvml needs cgo)
 make chart-lint  # helm template | kubeconform
 ```
 
-Requirements: Go 1.26+, and (for the chart) Helm 3 + kubeconform. Images are built for
-`linux/amd64` and `linux/arm64`.
+Requirements: Go 1.26+, and (for the chart) Helm 3 + kubeconform. The core/smart static image
+is built for `linux/amd64` and `linux/arm64`; the GPU `:v-gpu` image is `linux/amd64`-only
+(the go-nvml binding needs cgo, and arm64 GPU support is deferred).
 
 ## Contributing
 

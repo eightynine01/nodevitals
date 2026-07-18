@@ -153,7 +153,11 @@ func (r *nvmlReader) Read(_ context.Context) ([]gpuDevice, error) {
 		if reasons, ret := dev.GetCurrentClocksEventReasons(); ret == nvml.SUCCESS {
 			d.ThrottleReasons = reasons
 		}
-		if ecc, ret := dev.GetTotalEccErrors(nvml.MEMORY_ERROR_TYPE_UNCORRECTED, nvml.VOLATILE_ECC); ret == nvml.SUCCESS {
+		// AGGREGATE (lifetime), not VOLATILE: gpu_ecc_uncorrected_total is a
+		// KindCounter and must be monotonic. VOLATILE resets on driver reload/
+		// reboot, which would drop the counter to 0 and fire a spurious EXIT —
+		// clearing a real hardware-fault alert. Aggregate persists.
+		if ecc, ret := dev.GetTotalEccErrors(nvml.MEMORY_ERROR_TYPE_UNCORRECTED, nvml.AGGREGATE_ECC); ret == nvml.SUCCESS {
 			d.EccUncorrected = float64(ecc)
 		}
 
