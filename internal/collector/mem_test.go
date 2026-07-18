@@ -3,6 +3,8 @@ package collector
 import (
 	"context"
 	"testing"
+
+	"github.com/KeiaiLab/nodevitals/internal/model"
 )
 
 func TestMemReadsFixture(t *testing.T) {
@@ -15,6 +17,9 @@ func TestMemReadsFixture(t *testing.T) {
 	for _, s := range got {
 		if s.Device != "mem" {
 			t.Fatalf("device = %q, want mem", s.Device)
+		}
+		if s.Kind != model.KindGauge {
+			t.Fatalf("mem metrics must be gauges, got kind %q on %s", s.Kind, s.Metric)
 		}
 		m[s.Metric] = s.Value
 	}

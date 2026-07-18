@@ -3,6 +3,8 @@ package collector
 import (
 	"context"
 	"testing"
+
+	"github.com/KeiaiLab/nodevitals/internal/model"
 )
 
 func TestLoadAvgReadsFixture(t *testing.T) {
@@ -20,6 +22,9 @@ func TestLoadAvgReadsFixture(t *testing.T) {
 	}
 	if s.Node != "test-node" || s.Tier != "core" || s.Device != "cpu" {
 		t.Fatalf("bad identity: %+v", s)
+	}
+	if s.Kind != model.KindGauge {
+		t.Fatalf("load1 must be a gauge, got kind %q", s.Kind)
 	}
 }
 

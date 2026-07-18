@@ -35,13 +35,13 @@ func (c *diskCollector) Collect(ctx context.Context) ([]model.Sample, error) {
 	var out []model.Sample
 	for _, d := range stats {
 		mk := func(metric string, v float64) model.Sample {
-			return model.Sample{Node: c.node, Tier: "core", Device: d.DeviceName, Metric: metric, Value: v, Timestamp: now}
+			return model.Sample{Node: c.node, Tier: "core", Device: d.DeviceName, Metric: metric, Kind: model.KindCounter, Value: v, Timestamp: now}
 		}
 		out = append(out,
-			mk("disk_read_bytes", float64(d.ReadSectors)*512),
-			mk("disk_write_bytes", float64(d.WriteSectors)*512),
-			mk("disk_read_ios", float64(d.ReadIOs)),
-			mk("disk_write_ios", float64(d.WriteIOs)))
+			mk("disk_read_bytes_total", float64(d.ReadSectors)*512),
+			mk("disk_write_bytes_total", float64(d.WriteSectors)*512),
+			mk("disk_read_ios_total", float64(d.ReadIOs)),
+			mk("disk_write_ios_total", float64(d.WriteIOs)))
 	}
 	return out, nil
 }

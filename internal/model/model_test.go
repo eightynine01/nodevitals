@@ -31,6 +31,17 @@ func TestFingerprintVariesByEachIdentityField(t *testing.T) {
 	}
 }
 
+func TestSampleKindOmittedWhenGauge(t *testing.T) {
+	g, _ := json.Marshal(Sample{Metric: "load1"})
+	if strings.Contains(string(g), "\"kind\"") {
+		t.Fatalf("gauge sample must omit kind: %s", g)
+	}
+	c, _ := json.Marshal(Sample{Metric: "net_rx_bytes_total", Kind: KindCounter})
+	if !strings.Contains(string(c), "\"kind\":\"counter\"") {
+		t.Fatalf("counter sample must carry kind: %s", c)
+	}
+}
+
 func TestEndedAtOmittedWhenZero(t *testing.T) {
 	enter := Event{Node: "n", Condition: "load_high", Phase: PhaseEnter}
 	b, err := json.Marshal(enter)

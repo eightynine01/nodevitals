@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/KeiaiLab/nodevitals/internal/model"
 	"github.com/prometheus/procfs"
 )
 
@@ -36,6 +37,11 @@ func TestCPUUtilComputedFromDelta(t *testing.T) {
 	}
 	if total == nil {
 		t.Fatalf("no aggregate cpu_util_pct sample: %+v", got)
+	}
+	for i := range got {
+		if got[i].Kind != model.KindGauge {
+			t.Fatalf("cpu_util_pct must be a gauge, got kind %q on %s", got[i].Kind, got[i].Device)
+		}
 	}
 	if *total < 49.0 || *total > 51.0 {
 		t.Fatalf("cpu_util_pct = %.2f, want ~50.0", *total)

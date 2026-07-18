@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/KeiaiLab/nodevitals/internal/model"
 )
 
 func TestHwmonReadsTempFixture(t *testing.T) {
@@ -11,6 +13,11 @@ func TestHwmonReadsTempFixture(t *testing.T) {
 	got, err := c.Collect(context.Background())
 	if err != nil {
 		t.Fatalf("Collect: %v", err)
+	}
+	for i := range got {
+		if got[i].Kind != model.KindGauge {
+			t.Fatalf("hwmon metrics must be gauges, got kind %q", got[i].Kind)
+		}
 	}
 	var temp *float64
 	for i := range got {

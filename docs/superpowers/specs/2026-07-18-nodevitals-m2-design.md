@@ -46,8 +46,8 @@ M1 은 loadavg 하나를 손수 파싱했다. M2a 는 나머지 core 메트릭�
 | loadavg (M1 이관) | /proc/loadavg | `NewFS(root).LoadAvg()` | load1 |
 | cpu-util | /proc/stat 델타 | `NewFS(root).Stat()` → CPUStat | cpu_util_pct (per-cpu + total) |
 | mem | /proc/meminfo | `NewFS(root).Meminfo()` | mem_total_bytes, mem_used_bytes, mem_available_bytes, swap_used_bytes |
-| net | /proc/net/dev | `NewFS(root).NetDev()` | net_rx/tx_bytes, net_*_errors |
-| disk | /proc/diskstats | `blockdevice.NewFS(proc,sys).ProcDiskstats()` | disk_read_bytes, disk_write_bytes, disk_read_ios, disk_write_ios |
+| net | /proc/net/dev | `NewFS(root).NetDev()` | net_rx/tx_bytes_total, net_rx/tx_errors_total |
+| disk | /proc/diskstats | `blockdevice.NewFS(proc,sys).ProcDiskstats()` | disk_read_bytes_total, disk_write_bytes_total, disk_read_ios_total, disk_write_ios_total |
 | **hwmon** | /sys/class/hwmon | **손수 파싱** (procfs 미지원) | temp_celsius, fan_rpm (in_volts 는 v0.2 이연) |
 
 - **cpu-util 은 델타**라 이전 표본을 tier 상태로 보유(엔진처럼 순수하진 않음 — 콜렉터 내부 상태). loadavg 콜렉터의 stateless 패턴과 달리 `cpuCollector` 는 직전 `/proc/stat` 스냅샷을 보유하고 첫 tick 은 baseline(이벤트 없음).
