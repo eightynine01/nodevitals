@@ -4,6 +4,7 @@
 package event
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/nodevitals/nodevitals/internal/config"
@@ -86,7 +87,7 @@ func (e *Engine) Evaluate(samples []model.Sample) []model.Event {
 		}
 	}
 	for i := range out {
-		out[i].ID = out[i].Fingerprint()
+		out[i].ID = fmt.Sprintf("%s-%s-%d", out[i].Fingerprint(), out[i].Phase, out[i].Seq)
 	}
 	return out
 }

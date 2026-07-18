@@ -24,10 +24,12 @@ rules:
     enterFor: 3
     exitFor: 3
 
-# 고객 백엔드 webhook (Secret 참조 권장 — 여기선 최소)
+# 고객 백엔드 webhook.
+# ⚠️ webhooks[].secret 을 여기 평문으로 두지 마시오 — 이 값은 ConfigMap 으로 렌더되어
+#    평문 노출됩니다. HMAC secret 의 Kubernetes Secret 주입은 후속 마일스톤입니다.
 webhooks: []
 #  - url: https://backend.example/hook
-#    secret: ""
+#    secret: ""   # 후속: Secret 참조로 대체
 
 metrics:
   port: 9847

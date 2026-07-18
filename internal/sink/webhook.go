@@ -5,10 +5,11 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/nodevitals/nodevitals/internal/config"
@@ -39,11 +40,13 @@ func WrapEvent(ev model.Event) CloudEvent {
 	}
 }
 
-// Sign returns the Standard Webhooks HMAC-SHA256 signature of body.
-func Sign(secret string, body []byte) string {
+// Sign returns a Standard Webhooks v1 signature: base64(HMAC-SHA256(secret,
+// "{id}.{timestamp}.{body}")), formatted as "v1,<base64>".
+func Sign(secret, id string, timestamp int64, body []byte) string {
+	signed := id + "." + strconv.FormatInt(timestamp, 10) + "." + string(body)
 	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(body)
-	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
+	mac.Write([]byte(signed))
+	return "v1," + base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }
 
 // Webhook posts CloudEvents to a customer backend endpoint.
@@ -71,9 +74,11 @@ func (w *Webhook) EmitEvents(ctx context.Context, events []model.Event) error {
 		if err != nil {
 			return fmt.Errorf("build request: %w", err)
 		}
+		ts := time.Now().Unix()
 		req.Header.Set("Content-Type", "application/cloudevents+json")
 		req.Header.Set("Webhook-Id", ev.ID)
-		req.Header.Set("Webhook-Signature", Sign(w.cfg.Secret, body))
+		req.Header.Set("Webhook-Timestamp", strconv.FormatInt(ts, 10))
+		req.Header.Set("Webhook-Signature", Sign(w.cfg.Secret, ev.ID, ts, body))
 		resp, err := w.client.Do(req)
 		if err != nil {
 			return fmt.Errorf("post webhook: %w", err)

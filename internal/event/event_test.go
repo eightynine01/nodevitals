@@ -147,3 +147,20 @@ func TestEvaluateIsDeterministic(t *testing.T) {
 		}
 	}
 }
+
+func TestEnterAndExitHaveDistinctIDs(t *testing.T) {
+	r := config.Rule{Metric: "load1", Device: "cpu", Condition: "load_high", Severity: "warning", Threshold: 4.0, EnterFor: 1, ExitFor: 1}
+	e := NewEngine("n", []config.Rule{r})
+	breach := model.Sample{Node: "n", Tier: "core", Device: "cpu", Metric: "load1", Value: 9, Timestamp: time.Unix(100, 0).UTC()}
+	clear := model.Sample{Node: "n", Tier: "core", Device: "cpu", Metric: "load1", Value: 1, Timestamp: time.Unix(200, 0).UTC()}
+	ev := e.Evaluate([]model.Sample{breach, clear})
+	if len(ev) != 2 {
+		t.Fatalf("want ENTER+EXIT, got %d", len(ev))
+	}
+	if ev[0].ID == ev[1].ID {
+		t.Fatalf("ENTER and EXIT must have distinct IDs (else dedup drops EXIT): both %q", ev[0].ID)
+	}
+	if ev[0].Fingerprint() != ev[1].Fingerprint() {
+		t.Fatalf("ENTER and EXIT should still share the condition fingerprint")
+	}
+}
