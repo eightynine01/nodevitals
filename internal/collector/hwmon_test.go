@@ -2,6 +2,7 @@ package collector
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -33,5 +34,28 @@ func TestHwmonMissingDirIsEmptyNotError(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("want 0 samples, got %d", len(got))
+	}
+}
+
+func TestHwmonDistinctDevicesForSameDriverName(t *testing.T) {
+	c := NewHwmon("n", "../../testdata/sys-multi")
+	got, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	temps := map[string]float64{}
+	for _, s := range got {
+		if s.Metric == "temp_celsius" {
+			temps[s.Device] = s.Value
+		}
+	}
+	if len(temps) != 2 {
+		t.Fatalf("two nvme chips must produce two distinct Devices, got %d: %+v", len(temps), temps)
+	}
+	// both Devices must reference the nvme driver name and be distinct
+	for dev := range temps {
+		if !strings.Contains(dev, "nvme/temp1") {
+			t.Fatalf("device %q should contain nvme/temp1", dev)
+		}
 	}
 }

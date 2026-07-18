@@ -56,7 +56,7 @@ func (c *hwmonCollector) Collect(ctx context.Context) ([]model.Sample, error) {
 					if milli, err := strconv.ParseFloat(v, 64); err == nil {
 						out = append(out, model.Sample{
 							Node: c.node, Tier: "core",
-							Device: name + "/" + strings.TrimSuffix(fn, "_input"),
+							Device: chip.Name() + "/" + name + "/" + strings.TrimSuffix(fn, "_input"),
 							Metric: "temp_celsius", Value: milli / 1000.0, Timestamp: now,
 						})
 					}
@@ -66,7 +66,7 @@ func (c *hwmonCollector) Collect(ctx context.Context) ([]model.Sample, error) {
 					if rpm, err := strconv.ParseFloat(v, 64); err == nil {
 						out = append(out, model.Sample{
 							Node: c.node, Tier: "core",
-							Device: name + "/" + strings.TrimSuffix(fn, "_input"),
+							Device: chip.Name() + "/" + name + "/" + strings.TrimSuffix(fn, "_input"),
 							Metric: "fan_rpm", Value: rpm, Timestamp: now,
 						})
 					}
