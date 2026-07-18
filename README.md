@@ -15,12 +15,16 @@ Helm chart replace the `node_exporter` + `dcgm-exporter` + `smartctl_exporter` w
 
 > [!NOTE]
 > **Status: early development (v0.2-dev).** The pipeline (collect → event engine →
-> webhook/REST/metrics → Helm) works end-to-end. **Core tier** (load, CPU, memory,
-> disk I/O, network, hwmon — unprivileged) and the **SMART tier** (SATA/NVMe disk
-> health via a privileged, opt-in DaemonSet) are implemented. The GPU tier (NVML +
-> XID events) is next. See the
-> [design doc](docs/superpowers/specs/2026-07-17-nodevitals-design.md) and
-> [M2 design](docs/superpowers/specs/2026-07-18-nodevitals-m2-design.md).
+> webhook/REST/metrics → Helm) works end-to-end, and all three tiers are implemented:
+> **core** (load, CPU, memory, disk I/O, network, hwmon — unprivileged), **SMART**
+> (SATA/NVMe disk health via a privileged, opt-in DaemonSet), and **GPU** (NVIDIA
+> NVML metrics + async XID error events via an unprivileged, opt-in DaemonSet,
+> shipped as a separate glibc/cgo `:v-gpu` image since the go-nvml binding needs
+> cgo while core/smart stay static). The GPU tier's NVML path is unit- and
+> compile-checked without hardware — a real-GPU smoke test is still pending. See
+> the [design doc](docs/superpowers/specs/2026-07-17-nodevitals-design.md),
+> [M2 design](docs/superpowers/specs/2026-07-18-nodevitals-m2-design.md), and
+> [M2b GPU design](docs/superpowers/specs/2026-07-18-nodevitals-m2b-gpu-design.md).
 
 ## Why
 
