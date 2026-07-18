@@ -3,11 +3,9 @@ package collector
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
+
+	"github.com/prometheus/procfs"
 
 	"github.com/KeiaiLab/nodevitals/internal/model"
 )
@@ -25,20 +23,16 @@ func NewLoadAvg(node, procRoot string) Collector {
 func (l *loadAvg) Name() string { return "loadavg" }
 
 func (l *loadAvg) Collect(ctx context.Context) ([]model.Sample, error) {
-	b, err := os.ReadFile(filepath.Join(l.procRoot, "loadavg"))
+	fs, err := procfs.NewFS(l.procRoot)
+	if err != nil {
+		return nil, fmt.Errorf("open procfs %q: %w", l.procRoot, err)
+	}
+	la, err := fs.LoadAvg()
 	if err != nil {
 		return nil, fmt.Errorf("read loadavg: %w", err)
 	}
-	fields := strings.Fields(string(b))
-	if len(fields) < 1 {
-		return nil, fmt.Errorf("malformed loadavg: %q", string(b))
-	}
-	v, err := strconv.ParseFloat(fields[0], 64)
-	if err != nil {
-		return nil, fmt.Errorf("parse load1: %w", err)
-	}
 	return []model.Sample{{
 		Node: l.node, Tier: "core", Device: "cpu", Metric: "load1",
-		Value: v, Timestamp: time.Now().UTC(),
+		Value: la.Load1, Timestamp: time.Now().UTC(),
 	}}, nil
 }
