@@ -11,6 +11,7 @@ data:
     tier: core
     intervalSeconds: {{ .Values.intervalSeconds }}
     procRoot: /host/proc
+    sysRoot: /host/sys
     rules:
 {{ toYaml .Values.rules | indent 6 }}
     sinks:

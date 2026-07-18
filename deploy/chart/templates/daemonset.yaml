@@ -45,6 +45,9 @@ spec:
             - name: proc
               mountPath: /host/proc
               readOnly: true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
             - name: config
               mountPath: /etc/nodevitals
               readOnly: true
@@ -58,6 +61,9 @@ spec:
         - name: proc
           hostPath:
             path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
         - name: config
           configMap:
             name: nodevitals-core
