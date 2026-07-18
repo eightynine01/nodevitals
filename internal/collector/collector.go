@@ -44,3 +44,16 @@ func (r *Registry) CollectAll(ctx context.Context) []model.Sample {
 	}
 	return out
 }
+
+// EventSources returns the registered collectors that also implement
+// EventSource, discovered by type assertion. The agent drains each to the
+// webhook sinks.
+func (r *Registry) EventSources() []EventSource {
+	var out []EventSource
+	for _, c := range r.collectors {
+		if es, ok := c.(EventSource); ok {
+			out = append(out, es)
+		}
+	}
+	return out
+}
