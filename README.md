@@ -208,4 +208,4 @@ changes; bypass in an emergency with `LEFTHOOK=0 git push`.
 
 ## License
 
-[Apache-2.0](LICENSE)
+[MIT](LICENSE)
