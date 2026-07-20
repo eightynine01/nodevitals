@@ -94,14 +94,38 @@ else
 	ok "chart pushed"
 fi
 
-step "5/5 summary"
+step "5/5 package visibility"
+# A ghcr package created by the first push defaults to 'internal'. Artifact Hub
+# pulls anonymously, so an internal package fails its index job with a 401 —
+# and GitHub exposes no API to flip visibility, only the settings UI. Checking
+# it here turns a silent downstream failure into an actionable line.
+needs_attention=0
+check_public() {
+	local pkg=$1 enc vis
+	enc=${pkg//\//%2F}
+	vis=$(gh api "orgs/KeiaiLab/packages/container/$enc" --jq '.visibility' 2>/dev/null || echo unknown)
+	if [ "$vis" = public ]; then
+		ok "$pkg is public"
+	else
+		printf '\033[1;31m    %s is %s — Artifact Hub will 401 on anonymous pull\033[0m\n' "$pkg" "$vis"
+		echo "      https://github.com/orgs/KeiaiLab/packages/container/package/$enc"
+		echo "      → Package settings → Danger Zone → Change visibility → Public"
+		needs_attention=1
+	fi
+}
+check_public nodevitals
+check_public charts/nodevitals
+
+step "summary"
 cat <<EOF
     image  $IMG:$APP_VER      @ $DIG
     gpu    $IMG:$APP_VER-gpu  @ $DIG_GPU
     chart  oci://ghcr.io/keiailab/charts/nodevitals:$CHART_VER
 
 Next, outside this script:
-  - a newly created ghcr package defaults to 'internal'; set it to Public in the
-    package settings or the Artifact Hub crawler gets 401 on anonymous pull
-  - register the chart version in KeiaiLab/charts catalog.yaml
+  - register chart $CHART_VER in KeiaiLab/charts catalog.yaml
+  - Artifact Hub picks it up on its own 30-minute tracker cycle; there is no
+    public API to force a rescan, so the wait is expected, not a failure
 EOF
+[ "$needs_attention" -eq 0 ] || echo "
+    ^ fix the visibility above first, or the catalog index job fails."
