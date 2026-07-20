@@ -2,5 +2,49 @@ apiVersion: v2
 name: nodevitals
 description: Unified hardware telemetry agent for Kubernetes nodes
 type: application
-version: 0.1.0
+version: 0.1.1
 appVersion: "0.1.0"
+kubeVersion: ">=1.26.0-0"
+
+home: https://github.com/keiailab/nodevitals
+
+sources:
+  - https://github.com/keiailab/nodevitals
+
+keywords:
+  - nodevitals
+  - telemetry
+  - observability
+  - hardware-monitoring
+  - gpu-monitoring
+  - smart
+  - prometheus
+  - webhook
+  - daemonset
+  - kubernetes
+
+maintainers:
+  - name: keiailab
+    email: support@keiailab.com
+    url: https://keiailab.com
+
+icon: https://raw.githubusercontent.com/KeiaiLab/nodevitals/main/docs/branding/symbol.png
+
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/category: monitoring-logging
+  artifacthub.io/maturity: alpha
+  artifacthub.io/prerelease: "true"
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://github.com/keiailab/nodevitals/blob/main/README.md
+    - name: Source Code
+      url: https://github.com/keiailab/nodevitals
+    - name: Design Assets
+      url: https://github.com/KeiaiLab/nodevitals/blob/main/docs/BRANDING.md
+  artifacthub.io/screenshots: |
+    - title: Keiailab nodevitals centered service symbol
+      url: https://raw.githubusercontent.com/KeiaiLab/nodevitals/main/docs/branding/symbol.png
+  artifacthub.io/images: |
+    - name: nodevitals
+      image: ghcr.io/keiailab/nodevitals:0.1.0

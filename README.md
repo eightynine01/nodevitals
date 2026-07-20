@@ -1,11 +1,25 @@
+<p align="center">
+  <a href="https://keiailab.com">
+    <img src="docs/branding/symbol.png" alt="keiailab" width="96"/>
+  </a>
+</p>
+
 # nodevitals
 
 **Unified hardware telemetry for Kubernetes nodes — one agent instead of three exporters.**
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/KeiaiLab/nodevitals)](https://goreportcard.com/report/github.com/KeiaiLab/nodevitals)
-[![Go version](https://img.shields.io/github/go-mod/go-version/KeiaiLab/nodevitals)](go.mod)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)](go.mod)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.26%2B-326CE5?logo=kubernetes)](https://kubernetes.io/)
 [![Release](https://img.shields.io/github/v/release/KeiaiLab/nodevitals?include_prereleases&sort=semver)](https://github.com/KeiaiLab/nodevitals/releases)
-[![License](https://img.shields.io/github/license/KeiaiLab/nodevitals)](LICENSE)
+
+## Design assets
+
+| Asset | Path | Usage |
+|---|---|---|
+| Centered service symbol | [`docs/branding/symbol.png`](docs/branding/symbol.png) | GitHub README, Artifact Hub icon/screenshot |
+| Keiailab base symbol | [`docs/branding/base-symbol.png`](docs/branding/base-symbol.png) | Source reference for the outer rotating-arrow mark |
+| Branding guide | [`docs/BRANDING.md`](docs/BRANDING.md) | Public visual usage rules |
 
 nodevitals is a single Go agent that reads deep hardware state from each Kubernetes node —
 CPU, memory, disk/SMART, NIC, sensors, and NVIDIA GPUs — turns threshold crossings into
