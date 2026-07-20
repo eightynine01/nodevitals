@@ -64,6 +64,14 @@ func NewNVMLReader() (gpuReader, error) {
 		return nil, fmt.Errorf("nvml event set create: %s", ret.Error())
 	}
 
+	// Subscribe to XID critical-error events only. A dedicated single/double-bit
+	// ECC event subscription was evaluated and dropped: watchXid consumes only
+	// XID events, so ECC events would be received and immediately discarded (pure
+	// wakeup overhead, and SBE has a dedicated storm bit), while OR-ing the ECC
+	// bits into an all-or-nothing RegisterEvents risks NOT_SUPPORTED on
+	// ECC-eventless GPUs — which would drop the XID subscription too. The ECC
+	// signal is already carried by the polled aggregate gpu_ecc_*_total counters
+	// and by XID classification (48/92/94/95).
 	for _, dev := range devices {
 		if ret := dev.RegisterEvents(nvml.EventTypeXidCriticalError, set); ret != nvml.SUCCESS {
 			uuid, _ := dev.GetUUID()
@@ -153,12 +161,21 @@ func (r *nvmlReader) Read(_ context.Context) ([]gpuDevice, error) {
 		if reasons, ret := dev.GetCurrentClocksEventReasons(); ret == nvml.SUCCESS {
 			d.ThrottleReasons = reasons
 		}
-		// AGGREGATE (lifetime), not VOLATILE: gpu_ecc_uncorrected_total is a
-		// KindCounter and must be monotonic. VOLATILE resets on driver reload/
+		// BusId is a fixed-width, NUL-terminated C char array ([32]int8); the
+		// int8→string conversion lives untagged in pci.go (unit-tested under
+		// CGO_ENABLED=0), only the slice happens at this cgo boundary.
+		if pci, ret := dev.GetPciInfo(); ret == nvml.SUCCESS {
+			d.PCIBusID = int8ToString(pci.BusId[:])
+		}
+		// AGGREGATE (lifetime), not VOLATILE: the gpu_ecc_*_total metrics are
+		// KindCounters and must be monotonic. VOLATILE resets on driver reload/
 		// reboot, which would drop the counter to 0 and fire a spurious EXIT —
 		// clearing a real hardware-fault alert. Aggregate persists.
 		if ecc, ret := dev.GetTotalEccErrors(nvml.MEMORY_ERROR_TYPE_UNCORRECTED, nvml.AGGREGATE_ECC); ret == nvml.SUCCESS {
 			d.EccUncorrected = float64(ecc)
+		}
+		if ecc, ret := dev.GetTotalEccErrors(nvml.MEMORY_ERROR_TYPE_CORRECTED, nvml.AGGREGATE_ECC); ret == nvml.SUCCESS {
+			d.EccCorrected = float64(ecc)
 		}
 
 		out = append(out, d)

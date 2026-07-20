@@ -2,6 +2,7 @@ package sink
 
 import (
 	"net/http"
+	"sort"
 	"sync"
 
 	"github.com/KeiaiLab/nodevitals/internal/model"
@@ -58,12 +59,29 @@ func (m *Metrics) Collect(ch chan<- prometheus.Metric) {
 		if s.Kind == model.KindCounter {
 			vt = prometheus.CounterValue
 		}
+		// Promote Sample.Labels onto the const metric's variable labels after
+		// the fixed [node,tier,device]. sort.Strings is mandatory: Go map order
+		// is randomized, so unsorted keys would give the same metric name descs
+		// with different label ORDER across samples/scrapes, which registry.Gather
+		// rejects as inconsistent descriptors → /metrics 500. Nil/empty Labels
+		// yield exactly [node,tier,device] as before (backward compatible).
+		labelNames := []string{"node", "tier", "device"}
+		labelValues := []string{s.Node, s.Tier, s.Device}
+		keys := make([]string, 0, len(s.Labels))
+		for k := range s.Labels {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			labelNames = append(labelNames, k)
+			labelValues = append(labelValues, s.Labels[k])
+		}
 		desc := prometheus.NewDesc(
 			"nodevitals_hw_"+s.Metric,
 			"nodevitals hardware metric "+s.Metric,
-			[]string{"node", "tier", "device"}, nil,
+			labelNames, nil,
 		)
-		ch <- prometheus.MustNewConstMetric(desc, vt, s.Value, s.Node, s.Tier, s.Device)
+		ch <- prometheus.MustNewConstMetric(desc, vt, s.Value, labelValues...)
 	}
 }
 

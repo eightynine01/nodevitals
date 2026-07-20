@@ -14,10 +14,10 @@ import (
 // smartDevice keeps anatol/smart.go's ioctl-bound types out (see smart.go).
 type gpuDevice struct {
 	Index                                               int
-	UUID, Name                                          string
+	UUID, Name, PCIBusID                                string
 	UtilGPU, MemUsedBytes, MemTotalBytes, TempC, PowerW float64
 	ThrottleReasons                                     uint64
-	EccUncorrected                                      float64
+	EccUncorrected, EccCorrected                        float64
 }
 
 // xidRaw is one raw XID event as delivered by the NVML EventSet subscription
@@ -83,8 +83,13 @@ func (c *gpuCollector) Collect(ctx context.Context) ([]model.Sample, error) {
 	var out []model.Sample
 	for _, d := range devices {
 		device := fmt.Sprintf("gpu%d", d.Index)
+		// idLabels is the shared G1 identity attached to every fixed sample this
+		// device emits, so a /metrics reading is attributable to one physical
+		// GPU (uuid globally unique; pci_bus_id node-local but stable per slot).
+		// The throttle loop below must NOT reuse this map — see the fresh-map note.
+		idLabels := map[string]string{"gpu_uuid": d.UUID, "gpu_model": d.Name, "pci_bus_id": d.PCIBusID}
 		mk := func(metric, kind string, v float64) model.Sample {
-			return model.Sample{Node: c.node, Tier: "gpu", Device: device, Metric: metric, Kind: kind, Value: v, Timestamp: now}
+			return model.Sample{Node: c.node, Tier: "gpu", Device: device, Metric: metric, Kind: kind, Value: v, Labels: idLabels, Timestamp: now}
 		}
 		out = append(out,
 			mk("gpu_utilization_pct", model.KindGauge, d.UtilGPU),
@@ -94,7 +99,22 @@ func (c *gpuCollector) Collect(ctx context.Context) ([]model.Sample, error) {
 			mk("gpu_power_watts", model.KindGauge, d.PowerW),
 			mk("gpu_throttle_reasons", model.KindGauge, float64(d.ThrottleReasons)),
 			mk("gpu_ecc_uncorrected_total", model.KindCounter, d.EccUncorrected),
+			mk("gpu_ecc_corrected_total", model.KindCounter, d.EccCorrected),
 		)
+		// G4: emit one gpu_throttle_active gauge per *performance-limiting* reason
+		// bit, alongside the raw mask sample above. Benign clock reasons (idle,
+		// app-set clocks, sync-boost, display) are skipped so the metric means what
+		// its name says — NVML sets gpu_idle on every idle GPU, which would else
+		// make gpu_throttle_active==1 a permanent false positive. Each reason gets
+		// a FRESH label map (identity + reason) — aliasing idLabels would leak a
+		// reason key onto the fixed samples and break Prometheus family consistency.
+		for _, reason := range decodeThrottle(d.ThrottleReasons) {
+			if benignThrottleReasons[reason] {
+				continue
+			}
+			lbls := map[string]string{"gpu_uuid": d.UUID, "gpu_model": d.Name, "pci_bus_id": d.PCIBusID, "reason": reason}
+			out = append(out, model.Sample{Node: c.node, Tier: "gpu", Device: device, Metric: "gpu_throttle_active", Kind: model.KindGauge, Value: 1, Labels: lbls, Timestamp: now})
+		}
 	}
 	return out, nil
 }
