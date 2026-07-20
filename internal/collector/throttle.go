@@ -39,3 +39,16 @@ func decodeThrottle(mask uint64) []string {
 	}
 	return out
 }
+
+// benignThrottleReasons are clock-reason bits that do NOT indicate a
+// performance-limiting throttle: idle (NVML sets gpu_idle whenever the GPU is
+// not busy), application/user-set clocks, the sync-boost group, and the display
+// clock floor. gpu_throttle_active (gpu.go) excludes these so an unfiltered
+// `gpu_throttle_active == 1` alert does not false-positive on every idle GPU.
+// The raw gpu_throttle_reasons mask still exposes every bit losslessly.
+var benignThrottleReasons = map[string]bool{
+	"gpu_idle":              true,
+	"app_clocks_setting":    true,
+	"sync_boost":            true,
+	"display_clock_setting": true,
+}

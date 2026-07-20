@@ -42,8 +42,9 @@ func recvEvent(t *testing.T, ch <-chan model.Event) model.Event {
 
 func TestGPUCollectMapsDeviceToSamples(t *testing.T) {
 	r := newFakeReader([]gpuDevice{{
-		Index: 0, UtilGPU: 55, MemUsedBytes: 1e9, MemTotalBytes: 8e9,
-		TempC: 70, PowerW: 250, ThrottleReasons: 0x40, EccUncorrected: 3,
+		Index: 0, UUID: "GPU-abc", Name: "NVIDIA A100", PCIBusID: "00000000:65:00.0",
+		UtilGPU: 55, MemUsedBytes: 1e9, MemTotalBytes: 8e9,
+		TempC: 70, PowerW: 250, ThrottleReasons: 0x40, EccUncorrected: 3, EccCorrected: 5,
 	}})
 	c := NewGPUCollector("test-node", r)
 
@@ -51,11 +52,15 @@ func TestGPUCollectMapsDeviceToSamples(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
-	if len(got) != 7 {
-		t.Fatalf("want 7 samples, got %d: %+v", len(got), got)
+	// 8 fixed samples + 1 gpu_throttle_active (ThrottleReasons 0x40 =
+	// hw_thermal_slowdown) = 9.
+	if len(got) != 9 {
+		t.Fatalf("want 9 samples (8 fixed + 1 throttle_active), got %d: %+v", len(got), got)
 	}
 
-	// deterministic order — table order from the design contract.
+	// deterministic order — table order from the design contract. The 8 fixed
+	// samples come first, in this order; the variable gpu_throttle_active
+	// sample(s) follow, so only the fixed prefix is order-checked.
 	wantOrder := []string{
 		"gpu_utilization_pct",
 		"gpu_mem_used_bytes",
@@ -64,10 +69,11 @@ func TestGPUCollectMapsDeviceToSamples(t *testing.T) {
 		"gpu_power_watts",
 		"gpu_throttle_reasons",
 		"gpu_ecc_uncorrected_total",
+		"gpu_ecc_corrected_total",
 	}
 	byMetric := map[string]model.Sample{}
 	for i, s := range got {
-		if s.Metric != wantOrder[i] {
+		if i < len(wantOrder) && s.Metric != wantOrder[i] {
 			t.Fatalf("got[%d].Metric = %q, want %q (deterministic order)", i, s.Metric, wantOrder[i])
 		}
 		byMetric[s.Metric] = s
@@ -106,6 +112,14 @@ func TestGPUCollectMapsDeviceToSamples(t *testing.T) {
 	}
 	if ecc.Kind != model.KindCounter {
 		t.Fatalf("gpu_ecc_uncorrected_total: Kind = %q, want %q", ecc.Kind, model.KindCounter)
+	}
+
+	corrected := byMetric["gpu_ecc_corrected_total"]
+	if corrected.Value != 5 {
+		t.Fatalf("gpu_ecc_corrected_total = %v, want 5", corrected.Value)
+	}
+	if corrected.Kind != model.KindCounter {
+		t.Fatalf("gpu_ecc_corrected_total: Kind = %q, want %q", corrected.Kind, model.KindCounter)
 	}
 }
 
@@ -153,8 +167,10 @@ func TestGPUCollectMultipleDevices(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
-	if len(got) != 14 {
-		t.Fatalf("want 14 samples (7 metrics × 2 devices), got %d", len(got))
+	// Both devices have ThrottleReasons 0 → no gpu_throttle_active samples, so
+	// only the 8 fixed metrics per device: 8 × 2 = 16.
+	if len(got) != 16 {
+		t.Fatalf("want 16 samples (8 metrics × 2 devices), got %d", len(got))
 	}
 
 	util := map[string]float64{}
@@ -168,6 +184,166 @@ func TestGPUCollectMultipleDevices(t *testing.T) {
 	}
 	if util["gpu1"] != 20 {
 		t.Fatalf("gpu1 utilization = %v, want 20", util["gpu1"])
+	}
+}
+
+// TestGPUCollectEmitsIdentityLabels pins G1: every sample a device produces —
+// the fixed metrics and any gpu_throttle_active — carries that device's
+// gpu_uuid/gpu_model/pci_bus_id identity, so a /metrics reading is attributable
+// to one physical GPU rather than just a per-node gpu<Index> position.
+func TestGPUCollectEmitsIdentityLabels(t *testing.T) {
+	r := newFakeReader([]gpuDevice{{
+		Index: 0, UUID: "GPU-abc", Name: "NVIDIA A100", PCIBusID: "00000000:65:00.0",
+		ThrottleReasons: 0x40, // → also exercises a gpu_throttle_active sample
+	}})
+	c := NewGPUCollector("test-node", r)
+
+	got, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	if len(got) == 0 {
+		t.Fatal("expected samples, got none")
+	}
+	sawThrottle := false
+	for _, s := range got {
+		if s.Metric == "gpu_throttle_active" {
+			sawThrottle = true
+		}
+		if s.Labels["gpu_uuid"] != "GPU-abc" {
+			t.Fatalf("%s: Labels[gpu_uuid] = %q, want %q", s.Metric, s.Labels["gpu_uuid"], "GPU-abc")
+		}
+		if s.Labels["gpu_model"] != "NVIDIA A100" {
+			t.Fatalf("%s: Labels[gpu_model] = %q, want %q", s.Metric, s.Labels["gpu_model"], "NVIDIA A100")
+		}
+		if s.Labels["pci_bus_id"] != "00000000:65:00.0" {
+			t.Fatalf("%s: Labels[pci_bus_id] = %q, want %q", s.Metric, s.Labels["pci_bus_id"], "00000000:65:00.0")
+		}
+	}
+	if !sawThrottle {
+		t.Fatal("expected a gpu_throttle_active sample (0x40) to also carry identity labels")
+	}
+}
+
+// TestGPUCollectEccCorrectedCounter pins G3: gpu_ecc_corrected_total mirrors
+// the uncorrected counter — a monotonic KindCounter carrying the polled
+// aggregate corrected-ECC count, emitted immediately after
+// gpu_ecc_uncorrected_total in the fixed order.
+func TestGPUCollectEccCorrectedCounter(t *testing.T) {
+	r := newFakeReader([]gpuDevice{{Index: 0, EccCorrected: 5}})
+	c := NewGPUCollector("test-node", r)
+
+	got, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	uncorrectedIdx, correctedIdx := -1, -1
+	var corrected model.Sample
+	for i, s := range got {
+		switch s.Metric {
+		case "gpu_ecc_uncorrected_total":
+			uncorrectedIdx = i
+		case "gpu_ecc_corrected_total":
+			correctedIdx = i
+			corrected = s
+		}
+	}
+	if correctedIdx == -1 {
+		t.Fatalf("gpu_ecc_corrected_total not emitted: %+v", got)
+	}
+	if corrected.Value != 5 {
+		t.Fatalf("gpu_ecc_corrected_total = %v, want 5", corrected.Value)
+	}
+	if corrected.Kind != model.KindCounter {
+		t.Fatalf("gpu_ecc_corrected_total: Kind = %q, want %q", corrected.Kind, model.KindCounter)
+	}
+	if correctedIdx != uncorrectedIdx+1 {
+		t.Fatalf("gpu_ecc_corrected_total at index %d, want right after gpu_ecc_uncorrected_total (index %d)", correctedIdx, uncorrectedIdx)
+	}
+}
+
+// TestGPUCollectThrottleActivePerReason pins G4: each set throttle-reason bit
+// becomes one gpu_throttle_active gauge (value 1) labeled with that reason plus
+// the device identity, in decodeThrottle's ascending-bit order, while the raw
+// gpu_throttle_reasons mask sample stays present. A zero mask emits none.
+func TestGPUCollectThrottleActivePerReason(t *testing.T) {
+	r := newFakeReader([]gpuDevice{{
+		Index: 0, UUID: "GPU-abc", Name: "NVIDIA A100", PCIBusID: "00000000:65:00.0",
+		ThrottleReasons: 0x20 | 0x40,
+	}})
+	c := NewGPUCollector("test-node", r)
+
+	got, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	var reasons []string
+	rawMaskPresent := false
+	for _, s := range got {
+		switch s.Metric {
+		case "gpu_throttle_active":
+			reasons = append(reasons, s.Labels["reason"])
+			if s.Value != 1 {
+				t.Fatalf("gpu_throttle_active value = %v, want 1", s.Value)
+			}
+			if s.Kind != model.KindGauge {
+				t.Fatalf("gpu_throttle_active: Kind = %q, want gauge", s.Kind)
+			}
+			// identity labels ride alongside the reason label.
+			if s.Labels["gpu_uuid"] != "GPU-abc" || s.Labels["pci_bus_id"] != "00000000:65:00.0" {
+				t.Fatalf("gpu_throttle_active missing identity labels: %+v", s.Labels)
+			}
+		case "gpu_throttle_reasons":
+			rawMaskPresent = true
+			if s.Value != 96 { // 0x20 | 0x40
+				t.Fatalf("raw gpu_throttle_reasons mask = %v, want 96", s.Value)
+			}
+		}
+	}
+
+	want := []string{"sw_thermal_slowdown", "hw_thermal_slowdown"} // ascending-bit order
+	if len(reasons) != len(want) {
+		t.Fatalf("gpu_throttle_active reasons = %v, want %v", reasons, want)
+	}
+	for i := range want {
+		if reasons[i] != want[i] {
+			t.Fatalf("gpu_throttle_active[%d] reason = %q, want %q (ascending-bit order)", i, reasons[i], want[i])
+		}
+	}
+	if !rawMaskPresent {
+		t.Fatal("raw gpu_throttle_reasons mask sample must remain present alongside decoded reasons")
+	}
+
+	// Second case: a zero mask emits zero gpu_throttle_active samples.
+	r0 := newFakeReader([]gpuDevice{{Index: 0, ThrottleReasons: 0}})
+	got0, err := NewGPUCollector("test-node", r0).Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	for _, s := range got0 {
+		if s.Metric == "gpu_throttle_active" {
+			t.Fatalf("zero throttle mask must emit no gpu_throttle_active, got %+v", s)
+		}
+	}
+
+	// Third case: benign clock reasons (idle/app-clocks/sync-boost/display) are
+	// filtered — gpu_throttle_active must fire only for performance-limiting bits,
+	// else NVML's ever-set gpu_idle would make every idle GPU a false positive.
+	rb := newFakeReader([]gpuDevice{{Index: 0, ThrottleReasons: 0x1 | 0x40}}) // gpu_idle(benign) + hw_thermal_slowdown(active)
+	gotb, err := NewGPUCollector("test-node", rb).Collect(context.Background())
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	var active []string
+	for _, s := range gotb {
+		if s.Metric == "gpu_throttle_active" {
+			active = append(active, s.Labels["reason"])
+		}
+	}
+	if len(active) != 1 || active[0] != "hw_thermal_slowdown" {
+		t.Fatalf("gpu_throttle_active reasons = %v, want exactly [hw_thermal_slowdown] (benign gpu_idle filtered)", active)
 	}
 }
 
