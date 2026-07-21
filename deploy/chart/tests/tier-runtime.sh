@@ -105,4 +105,36 @@ GPUONLY="$(render --set singlePod=true --set tiers.core.enabled=false --set tier
 printf '%s\n' "$GPUONLY" | grep -q 'nvidia.com/gpu.present' \
   || fail "gpu-only singlePod should still pin to GPU nodes"
 
-echo "PASS: gpu runtimeClass + smart privileged opt-in (inert by default), config/secret checksums roll all 3 tiers, singlePod merges tiers into 1 DaemonSet"
+# 5. nodeExporter 는 node_* 전체 표면을 같은 파드에서 낸다. 켰을 때 필요한
+#    호스트 접근이 전부 붙는지, 껐을 때 아무것도 새지 않는지를 함께 본다.
+#    특히 hostNetwork: /proc/net 은 마운트 경로가 아니라 읽는 프로세스의 netns 로
+#    해석되므로, 이게 빠지면 netdev 가 호스트가 아닌 파드 인터페이스를 보고도
+#    아무 에러 없이 "정상"으로 보인다.
+NE="$(render --set nodeExporter.enabled=true --set singlePod=true)"
+printf '%s\n' "$NE" | grep -q 'hostNetwork: true' \
+  || fail "nodeExporter 활성 시 hostNetwork 가 없으면 netdev 가 파드 netns 를 본다"
+printf '%s\n' "$NE" | grep -q 'dnsPolicy: ClusterFirstWithHostNet' \
+  || fail "hostNetwork 를 켜면 dnsPolicy 도 함께 바꿔야 클러스터 DNS 가 유지된다"
+printf '%s\n' "$NE" | grep -q 'mountPath: /host/root' \
+  || fail "filesystem collector 가 볼 호스트 루트 마운트 누락"
+printf '%s\n' "$NE" | grep -q 'textfile_collector' \
+  || fail "textfile collector 디렉터리 마운트 누락 (node_smart_attr 소실)"
+printf '%s\n' "$NE" | grep -q 'rootfsPath: /host/root' \
+  || fail "config 에 rootfsPath 가 전달되지 않음"
+
+# 호스트 루트 마운트는 컨테이너에 호스트 파일시스템 전체 읽기를 준다. 끄면
+# 마운트와 rootfsPath 가 함께 사라져야 하고(권한 축소), 그 경우 에이전트가
+# filesystem collector 를 끄므로 "다른 기계를 잰 값"이 나오지 않는다.
+NE_NOROOT="$(render --set nodeExporter.enabled=true --set nodeExporter.mountRootFS=false)"
+printf '%s\n' "$NE_NOROOT" | grep -q '/host/root' \
+  && fail "mountRootFS=false 인데 호스트 루트가 여전히 마운트된다"
+printf '%s\n' "$NE_NOROOT" | grep -q 'rootfsPath' \
+  && fail "mountRootFS=false 인데 rootfsPath 가 config 에 남아 filesystem collector 가 컨테이너를 잰다"
+
+OFF_NE="$(render --set singlePod=true)"
+for token in 'hostNetwork' '/host/root' 'textfile_collector' 'nodeExporter:'; do
+  printf '%s\n' "$OFF_NE" | grep -q -- "$token" \
+    && fail "nodeExporter 기본 off 인데 $token 이 렌더됐다"
+done
+
+echo "PASS: gpu runtimeClass + smart privileged opt-in (inert by default), config/secret checksums roll all 3 tiers, singlePod merges tiers into 1 DaemonSet, nodeExporter wires hostNetwork+rootfs+textfile"

@@ -56,6 +56,18 @@ type Config struct {
 	DevRoot         string      `yaml:"devRoot"`
 	Rules           []Rule      `yaml:"rules"`
 	Sinks           SinksConfig `yaml:"sinks"`
+	// NodeExporter serves the upstream node_* metric surface from this same
+	// process, so one DaemonSet can replace a separate node_exporter one.
+	NodeExporter NodeExporterConfig `yaml:"nodeExporter"`
+}
+
+// NodeExporterConfig configures the embedded node_exporter collectors. Paths
+// point at the host mounts, not the container's own /proc and /sys.
+type NodeExporterConfig struct {
+	Enabled     bool     `yaml:"enabled"`
+	TextfileDir string   `yaml:"textfileDir"`
+	RootFSPath  string   `yaml:"rootfsPath"`
+	ExtraFlags  []string `yaml:"extraFlags"`
 }
 
 // ResolvedTiers returns the tiers to run, in config order and de-duplicated.

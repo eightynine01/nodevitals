@@ -1,0 +1,16 @@
+nodevitals
+Copyright (c) KeiaiLab
+
+This product bundles node_exporter collectors, which are available under the
+Apache License 2.0.
+
+  github.com/prometheus/node_exporter
+  Copyright 2013-2024 The Prometheus Authors
+  https://github.com/prometheus/node_exporter/blob/master/LICENSE
+
+nodevitals imports node_exporter's `collector` package so a single agent can
+serve the full node_* metric surface with identical names, labels, and
+semantics. Reimplementing those collectors would have re-derived years of
+kernel-version edge cases and produced a schema that silently disagrees with
+the ecosystem's. The Apache-2.0 terms above apply to that bundled portion;
+nodevitals' own code remains MIT (see LICENSE).

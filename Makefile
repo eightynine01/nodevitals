@@ -19,7 +19,9 @@ fmt:
 	@out=$$(gofmt -l ./cmd ./internal); if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
 
 build:
-	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o dist/nodevitals ./cmd/nodevitals
+	# 이미지와 같은 CGO_ENABLED=1 — go-nvml 과 node_exporter 의 일부 collector 가
+	# cgo 를 요구한다. 0 으로 두면 로컬 게이트만 실패해 이미지와 어긋난다.
+	CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -tags gpu -o dist/nodevitals ./cmd/nodevitals
 
 docker:
 	docker build --platform=linux/amd64 -t ghcr.io/keiailab/nodevitals:dev .
