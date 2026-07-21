@@ -1,6 +1,8 @@
 package sink
 
 import (
+	"fmt"
+	"log/slog"
 	"net/http"
 	"sort"
 	"sync"
@@ -93,5 +95,31 @@ func (m *Metrics) Collect(ch chan<- prometheus.Metric) {
 
 // Handler returns the /metrics HTTP handler.
 func (m *Metrics) Handler() http.Handler {
-	return promhttp.HandlerFor(m.reg, promhttp.HandlerOpts{Registry: m.reg})
+	// ContinueOnError, not the default HTTPErrorOnError.
+	//
+	// A textfile collector is user-supplied, so it can export a metric name a
+	// built-in collector also owns — with different help text. client_golang
+	// treats that as fatal and rejects the WHOLE scrape with a 500, so one
+	// stray .prom file silently takes out every series on that node. That is
+	// exactly what happened here: an ansible-written edac_metrics.prom
+	// collided with the built-in edac collector, and only on the nodes whose
+	// hardware actually registers a memory controller — two nodes served zero
+	// metrics while looking healthy on /healthz.
+	//
+	// Upstream node_exporter makes the same choice for the same reason. The
+	// error still surfaces: it goes to the log, and the affected collector's
+	// node_scrape_collector_success drops to 0.
+	return promhttp.HandlerFor(m.reg, promhttp.HandlerOpts{
+		Registry:      m.reg,
+		ErrorHandling: promhttp.ContinueOnError,
+		ErrorLog:      slogErrorLog{},
+	})
+}
+
+// slogErrorLog adapts promhttp's logger to slog so scrape-time collector
+// errors land in the agent's normal log stream instead of vanishing.
+type slogErrorLog struct{}
+
+func (slogErrorLog) Println(v ...any) {
+	slog.Warn("metrics scrape", "err", fmt.Sprint(v...))
 }
