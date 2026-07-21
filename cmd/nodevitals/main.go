@@ -18,6 +18,7 @@ import (
 	"github.com/KeiaiLab/nodevitals/internal/config"
 	"github.com/KeiaiLab/nodevitals/internal/event"
 	"github.com/KeiaiLab/nodevitals/internal/httpapi"
+	"github.com/KeiaiLab/nodevitals/internal/nodeexporter"
 	"github.com/KeiaiLab/nodevitals/internal/sink"
 )
 
@@ -80,6 +81,38 @@ func main() {
 	}
 	metrics := sink.NewMetrics()
 
+	// Serve the upstream node_* surface from this same endpoint when asked, so
+	// one DaemonSet replaces a separate node_exporter one and the existing
+	// dashboards and alert rules built on node_* keep working untouched.
+	neCount := 0
+	if cfg.NodeExporter.Enabled {
+		c, err := nodeexporter.New(nodeexporter.Config{
+			ProcPath:    cfg.ProcRoot,
+			SysPath:     cfg.SysRoot,
+			RootFSPath:  cfg.NodeExporter.RootFSPath,
+			TextfileDir: cfg.NodeExporter.TextfileDir,
+			ExtraFlags:  cfg.NodeExporter.ExtraFlags,
+		}, slog.Default())
+		if err != nil {
+			slog.Error("node_exporter collectors", "err", err)
+			os.Exit(1)
+		}
+		if err := metrics.Register(c); err != nil {
+			slog.Error("register node_exporter collectors", "err", err)
+			os.Exit(1)
+		}
+		// An empty set means the flags never took effect: the endpoint would
+		// serve zero node_* series while looking perfectly healthy, which is
+		// exactly the silent failure this project keeps running into.
+		names := nodeexporter.Enabled(c)
+		neCount = len(names)
+		if neCount == 0 {
+			slog.Error("node_exporter enabled but no collectors are active — refusing to serve an empty node_* surface")
+			os.Exit(1)
+		}
+		slog.Info("node_exporter collectors registered", "count", neCount)
+	}
+
 	a := agent.New(cfg, &reg, eng, webhooks, metrics)
 
 	mux := httpapi.NewServer(a, metrics.Handler())
@@ -102,7 +135,7 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	slog.Info("nodevitals started", "node", cfg.Node, "tiers", strings.Join(tiers, ","), "listen", listen)
+	slog.Info("nodevitals started", "node", cfg.Node, "tiers", strings.Join(tiers, ","), "nodeExporterCollectors", neCount, "listen", listen)
 	a.Run(ctx)
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

@@ -235,6 +235,11 @@ image for all tiers, built for `linux/amd64`. It is cgo/glibc rather than static
 because the gpu tier's go-nvml binding needs cgo; that also makes arm64 a cross
 -toolchain problem with no current consumer, so arm64 is deferred.
 
+## Third-party notices
+
+nodevitals bundles node_exporter's collectors (Apache-2.0) to serve the full
+`node_*` surface — see [`NOTICE`](NOTICE). nodevitals' own code is MIT.
+
 ## Supply chain
 
 Supply-chain gates are local `make` targets (not CI — see [ADR-0002](docs/kb/adr/0002-supply-chain-and-release.md)):

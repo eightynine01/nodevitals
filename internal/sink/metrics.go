@@ -31,6 +31,12 @@ func NewMetrics() *Metrics {
 	return m
 }
 
+// Register adds an extra collector to the exposed registry — used to serve the
+// embedded node_exporter surface from the same /metrics endpoint.
+func (m *Metrics) Register(c prometheus.Collector) error {
+	return m.reg.Register(c)
+}
+
 // RecordDropped increments the drop counter for a sink by n events. Called when
 // DeliverWithRetry exhausts its retries and the batch is lost, so operators can
 // alert on otherwise-silent delivery loss.

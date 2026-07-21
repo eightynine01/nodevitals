@@ -69,3 +69,54 @@ Call with (dict "ctx" . "tier" "<core|smart|gpu>").
 checksum/config: {{ include (print $ctx.Template.BasePath "/configmap" $suffix ".yaml") $ctx | sha256sum }}
 checksum/webhook-secret: {{ include (print $ctx.Template.BasePath "/secret.yaml") $ctx | sha256sum }}
 {{- end -}}
+
+{{/*
+hostNetwork for a pod spec. /proc/net resolves against the *reading task's*
+network namespace, not the mounted path — so a pod-network container reading
+/host/proc/net/dev sees its own eth0 instead of the host's interfaces. The
+embedded node_exporter's netdev/netclass/sockstat collectors are therefore
+wrong without this, which is why upstream node_exporter runs host-networked.
+*/}}
+{{- define "nodevitals.hostNetwork" -}}
+{{- if or .Values.hostNetwork .Values.nodeExporter.enabled }}
+hostNetwork: true
+dnsPolicy: ClusterFirstWithHostNet
+{{- end }}
+{{- end -}}
+
+{{/*
+Extra volumeMounts the embedded node_exporter needs: the host root for the
+filesystem collector, and the textfile directory an external emitter (e.g. an
+ansible role writing SMART) drops .prom files into.
+*/}}
+{{- define "nodevitals.nodeExporterMounts" -}}
+{{- if .Values.nodeExporter.enabled }}
+{{- if .Values.nodeExporter.mountRootFS }}
+- name: rootfs
+  mountPath: /host/root
+  readOnly: true
+  mountPropagation: HostToContainer
+{{- end }}
+{{- with .Values.nodeExporter.textfileDir }}
+- name: textfile
+  mountPath: {{ . | quote }}
+  readOnly: true
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{- define "nodevitals.nodeExporterVolumes" -}}
+{{- if .Values.nodeExporter.enabled }}
+{{- if .Values.nodeExporter.mountRootFS }}
+- name: rootfs
+  hostPath:
+    path: /
+{{- end }}
+{{- with .Values.nodeExporter.textfileDir }}
+- name: textfile
+  hostPath:
+    path: {{ . | quote }}
+    type: DirectoryOrCreate
+{{- end }}
+{{- end }}
+{{- end -}}

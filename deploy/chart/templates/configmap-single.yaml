@@ -27,6 +27,20 @@ data:
 {{- if .Values.tiers.gpu.enabled }}
 {{ toYaml .Values.gpuRules | indent 6 }}
 {{- end }}
+{{- if .Values.nodeExporter.enabled }}
+    nodeExporter:
+      enabled: true
+      {{- if .Values.nodeExporter.mountRootFS }}
+      rootfsPath: /host/root
+      {{- end }}
+      {{- with .Values.nodeExporter.textfileDir }}
+      textfileDir: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.nodeExporter.extraFlags }}
+      extraFlags:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+{{- end }}
     sinks:
       metrics:
         enabled: true

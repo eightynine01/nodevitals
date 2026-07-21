@@ -22,6 +22,7 @@ spec:
         {{- include "nodevitals.configChecksums" (dict "ctx" . "tier" "single") | nindent 8 }}
     spec:
       automountServiceAccountToken: false
+      {{- include "nodevitals.hostNetwork" . | nindent 6 }}
       {{- if .Values.tiers.gpu.enabled }}
       {{- with .Values.tiers.gpu.runtimeClassName }}
       # runtimeClassName 은 pod 단위라 합쳐진 pod 전체가 NVIDIA 런타임으로 뜬다.
@@ -110,6 +111,7 @@ spec:
             - name: config
               mountPath: /etc/nodevitals
               readOnly: true
+            {{- include "nodevitals.nodeExporterMounts" . | nindent 12 }}
           resources:
 {{ toYaml .Values.resources | indent 12 }}
           livenessProbe:
@@ -139,4 +141,5 @@ spec:
         - name: config
           configMap:
             name: nodevitals
+        {{- include "nodevitals.nodeExporterVolumes" . | nindent 8 }}
 {{- end }}

@@ -13,6 +13,27 @@ image:
 # 건너뛴다(에이전트가 경고 후 계속 — 다른 tier 는 정상 수집).
 singlePod: false
 
+# 임베드된 node_exporter collector 로 node_* 전체 표면(실노드 기준 ~379 family)을
+# 같은 엔드포인트에서 제공한다. 켜면 별도 node_exporter DaemonSet 이 불요해지고,
+# 메트릭 이름·라벨·의미가 upstream 과 동일하므로 기존 대시보드와 알림 룰이
+# 그대로 살아난다.
+#
+# hostNetwork 주의: /proc/net 은 마운트 경로가 아니라 *읽는 프로세스의 netns* 로
+# 해석된다. 파드 네트워크에서 읽으면 호스트가 아니라 파드 자신의 인터페이스가
+# 보이므로(eth0 하나), netdev/netclass/sockstat 을 제대로 수집하려면
+# hostNetwork: true 가 필요하다 — upstream node_exporter 도 같은 이유로 그렇게 돈다.
+nodeExporter:
+  enabled: false
+  # filesystem collector 가 실제 마운트를 보려면 호스트 루트가 필요하다.
+  mountRootFS: true
+  # ansible textfile collector(node_smart_attr 등)가 쓰는 디렉터리. 비우면 미마운트.
+  textfileDir: /var/lib/node_exporter/textfile_collector
+  # 예: ["--collector.disable-defaults", "--collector.cpu"]
+  extraFlags: []
+
+# hostNetwork 는 nodeExporter.enabled 시 자동으로 켜진다. 독립적으로 강제하려면 true.
+hostNetwork: false
+
 # tier 별 렌더 토글 + tier 고유 런타임 설정.
 tiers:
   core:

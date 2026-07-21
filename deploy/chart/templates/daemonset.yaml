@@ -20,6 +20,7 @@ spec:
         {{- include "nodevitals.configChecksums" (dict "ctx" . "tier" "core") | nindent 8 }}
     spec:
       automountServiceAccountToken: false
+      {{- include "nodevitals.hostNetwork" . | nindent 6 }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
@@ -54,6 +55,7 @@ spec:
             - name: config
               mountPath: /etc/nodevitals
               readOnly: true
+            {{- include "nodevitals.nodeExporterMounts" . | nindent 12 }}
           resources:
 {{ toYaml .Values.resources | indent 12 }}
           livenessProbe:
@@ -76,4 +78,5 @@ spec:
         - name: config
           configMap:
             name: nodevitals-core
+        {{- include "nodevitals.nodeExporterVolumes" . | nindent 8 }}
 {{- end }}
