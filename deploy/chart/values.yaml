@@ -24,11 +24,21 @@ singlePod: false
 # hostNetwork: true 가 필요하다 — upstream node_exporter 도 같은 이유로 그렇게 돈다.
 nodeExporter:
   enabled: false
-  # filesystem collector 가 실제 마운트를 보려면 호스트 루트가 필요하다.
+  # filesystem collector 는 호스트의 모든 마운트를 statfs 해야 하므로 호스트 루트를
+  # 읽기전용으로 마운트한다(upstream node_exporter 차트와 동일). 이는 컨테이너에
+  # **호스트 파일시스템 전체 읽기 권한**을 주는 것이므로, 디스크 사용량 메트릭이
+  # 필요 없다면 false 로 두는 편이 권한 표면이 좁다.
+  #
+  # false 로 두면 에이전트가 filesystem collector 를 아예 끈다 — 마운트 없이
+  # 켜두면 컨테이너 자신의 파일시스템을 재서 "노드 디스크 사용량"으로 내보내는,
+  # 그럴듯하지만 다른 기계를 측정한 값이 되기 때문이다.
   mountRootFS: true
   # ansible textfile collector(node_smart_attr 등)가 쓰는 디렉터리. 비우면 미마운트.
   textfileDir: /var/lib/node_exporter/textfile_collector
-  # 예: ["--collector.disable-defaults", "--collector.cpu"]
+  # collector 켜고 끄기 전용. --collector.* / --no-collector.* 만 허용되며 그 외는
+  # 기동 실패한다 — 이 목록은 ConfigMap 에서 오고, --path.* 를 뒤에서 덮으면 모든
+  # 수치가 호스트가 아니라 이 파드를 측정한 값으로 조용히 바뀐다.
+  # 예: ["--no-collector.zfs", "--no-collector.btrfs"]
   extraFlags: []
 
 # hostNetwork 는 nodeExporter.enabled 시 자동으로 켜진다. 독립적으로 강제하려면 true.

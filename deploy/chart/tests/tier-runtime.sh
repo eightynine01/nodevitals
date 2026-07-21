@@ -122,6 +122,15 @@ printf '%s\n' "$NE" | grep -q 'textfile_collector' \
 printf '%s\n' "$NE" | grep -q 'rootfsPath: /host/root' \
   || fail "config 에 rootfsPath 가 전달되지 않음"
 
+# 호스트 루트 마운트는 컨테이너에 호스트 파일시스템 전체 읽기를 준다. 끄면
+# 마운트와 rootfsPath 가 함께 사라져야 하고(권한 축소), 그 경우 에이전트가
+# filesystem collector 를 끄므로 "다른 기계를 잰 값"이 나오지 않는다.
+NE_NOROOT="$(render --set nodeExporter.enabled=true --set nodeExporter.mountRootFS=false)"
+printf '%s\n' "$NE_NOROOT" | grep -q '/host/root' \
+  && fail "mountRootFS=false 인데 호스트 루트가 여전히 마운트된다"
+printf '%s\n' "$NE_NOROOT" | grep -q 'rootfsPath' \
+  && fail "mountRootFS=false 인데 rootfsPath 가 config 에 남아 filesystem collector 가 컨테이너를 잰다"
+
 OFF_NE="$(render --set singlePod=true)"
 for token in 'hostNetwork' '/host/root' 'textfile_collector' 'nodeExporter:'; do
   printf '%s\n' "$OFF_NE" | grep -q -- "$token" \

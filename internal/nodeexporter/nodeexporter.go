@@ -14,6 +14,7 @@ package nodeexporter
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/alecthomas/kingpin/v2"
@@ -24,11 +25,26 @@ import (
 // Config selects the host paths the embedded collectors read through. In a
 // DaemonSet these are the hostPath mounts, not the container's own /proc.
 type Config struct {
-	ProcPath     string
-	SysPath      string
-	RootFSPath   string
-	TextfileDir  string
-	ExtraFlags   []string
+	ProcPath    string
+	SysPath     string
+	RootFSPath  string
+	TextfileDir string
+	// ExtraFlags tunes which collectors run. Only "--collector.*" flags are
+	// accepted: this list arrives from a ConfigMap, and the path flags above
+	// are what point the collectors at the host rather than at this container,
+	// so letting a later --path.* override them would silently turn every
+	// reading into a measurement of the pod itself.
+	ExtraFlags []string
+}
+
+// validateExtraFlags rejects anything outside the --collector.* namespace.
+func validateExtraFlags(flags []string) error {
+	for _, f := range flags {
+		if !strings.HasPrefix(f, "--collector.") && !strings.HasPrefix(f, "--no-collector.") {
+			return fmt.Errorf("extraFlags only accepts --collector.* / --no-collector.* flags, got %q", f)
+		}
+	}
+	return nil
 }
 
 // parseOnce guards the kingpin parse. node_exporter's collectors register
@@ -42,10 +58,22 @@ var parseErr error
 // collector. Register it alongside nodevitals' own metrics to serve both
 // surfaces from one endpoint.
 func New(cfg Config, log *slog.Logger) (prometheus.Collector, error) {
+	if err := validateExtraFlags(cfg.ExtraFlags); err != nil {
+		return nil, err
+	}
+
 	args := []string{
 		"--path.procfs=" + orDefault(cfg.ProcPath, "/proc"),
 		"--path.sysfs=" + orDefault(cfg.SysPath, "/sys"),
-		"--path.rootfs=" + orDefault(cfg.RootFSPath, "/"),
+	}
+	if cfg.RootFSPath != "" {
+		args = append(args, "--path.rootfs="+cfg.RootFSPath)
+	} else {
+		// Without a host root mount the filesystem collector would statfs the
+		// container's own mounts and report them as the node's — a plausible
+		// number that is simply about the wrong machine. Prefer no series over
+		// wrong series.
+		args = append(args, "--no-collector.filesystem")
 	}
 	if cfg.TextfileDir != "" {
 		args = append(args, "--collector.textfile.directory="+cfg.TextfileDir)
