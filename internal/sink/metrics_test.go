@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/KeiaiLab/nodevitals/internal/model"
 )
 
@@ -184,5 +186,51 @@ func TestMetricsRecordDroppedExposesCounter(t *testing.T) {
 	}
 	if !strings.Contains(body, `nodevitals_delivery_dropped_total{sink="webhook-b"} 1`) {
 		t.Fatalf("want webhook-b dropped=1:\n%s", body)
+	}
+}
+
+// conflictingCollector exports a metric name with help text that disagrees
+// with another collector's — the shape a user-written textfile .prom takes
+// when it reuses a built-in collector's metric name.
+type conflictingCollector struct{ help string }
+
+// Describe sends nothing, which makes this an *unchecked* collector — the
+// registry accepts it without comparing descriptors, so a name/help conflict
+// only surfaces at scrape time. That is precisely how node_exporter's textfile
+// collector behaves: the .prom file is read at collect time, so nothing can be
+// validated up front.
+func (c conflictingCollector) Describe(chan<- *prometheus.Desc) {}
+
+func (c conflictingCollector) Collect(ch chan<- prometheus.Metric) {
+	ch <- prometheus.MustNewConstMetric(
+		prometheus.NewDesc("node_edac_correctable_errors_total", c.help, nil, nil),
+		prometheus.GaugeValue, 0,
+	)
+}
+
+func TestHandlerServesDespiteConflictingHelpText(t *testing.T) {
+	// Two collectors, same metric name, different help. client_golang's default
+	// error handling rejects the entire scrape with a 500 — which on a real
+	// node meant every series disappeared because one ansible-written .prom
+	// reused a built-in collector's name. The endpoint must keep serving the
+	// metrics it can and report the conflict through the log instead.
+	m := NewMetrics()
+	// A known-good series that must survive the conflicting one.
+	m.RecordDropped("webhook", 3)
+	if err := m.Register(conflictingCollector{help: "Total correctable memory errors."}); err != nil {
+		t.Fatalf("register first: %v", err)
+	}
+	if err := m.Register(conflictingCollector{help: "Metric read from /var/lib/node_exporter/textfile_collector/edac.prom"}); err != nil {
+		t.Fatalf("register second: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	m.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("conflicting help text must not fail the scrape, got HTTP %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "nodevitals_delivery_dropped_total") {
+		t.Fatalf("unrelated metrics must still be served, body:\n%s", rec.Body.String())
 	}
 }
