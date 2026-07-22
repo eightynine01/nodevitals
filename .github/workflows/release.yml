@@ -1,0 +1,125 @@
+# 릴리스 파이프라인 — main 착지 시 Chart.yaml 의 appVersion 을 진실로 삼아
+# 이미지·차트를 ghcr 에 발행한다. 모든 스텝이 멱등이라(이미 발행된 태그는
+# skip) 재실행·문서-only 커밋에 안전하다.
+#
+# 서명은 keyless(cosign + GitHub OIDC)다. 로컬 릴리스(hack/release.sh)는
+# OpenBao transit 키를 쓰지만, 그 OpenBao 는 NetBird 내부 전용이라 hosted
+# 러너가 도달할 수 없다. GitHub Actions 의 워크로드 신원
+# (token.actions.githubusercontent.com)은 공개 Fulcio 신뢰 목록에 있는
+# 발급자라 브라우저 없이 서명된다 — 검증 방법 2종은 README 참조.
+name: release
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cmd/**"
+      - "internal/**"
+      - "deploy/chart/**"
+      - "go.mod"
+      - "go.sum"
+      - "Dockerfile"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write   # ghcr push
+  id-token: write   # cosign keyless (Fulcio OIDC)
+
+env:
+  IMG: ghcr.io/keiailab/nodevitals
+  CHART_OCI: oci://ghcr.io/keiailab/charts
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read versions from Chart.yaml (SSOT)
+        id: ver
+        run: |
+          APP=$(awk '/^appVersion:/{gsub(/"/,"",$2); print $2; exit}' deploy/chart/Chart.yaml)
+          CHART=$(awk '/^version:/{print $2; exit}' deploy/chart/Chart.yaml)
+          echo "app=$APP" >> "$GITHUB_OUTPUT"
+          echo "chart=$CHART" >> "$GITHUB_OUTPUT"
+          echo "app=$APP chart=$CHART"
+
+      - name: Log in to ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if image already published
+        id: img
+        run: |
+          if docker manifest inspect "$IMG:${{ steps.ver.outputs.app }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"; echo "skip — $IMG:${{ steps.ver.outputs.app }} already published"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.img.outputs.exists == 'false'
+
+      # Fail-closed: 취약점 스캔은 push 전에 로컬 이미지로 (ADR-0002).
+      - name: Build (local, for scan)
+        if: steps.img.outputs.exists == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: ${{ env.IMG }}:scan
+
+      - name: Trivy scan (HIGH/CRITICAL block)
+        if: steps.img.outputs.exists == 'false'
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMG }}:scan
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Push image (provenance + sbom)
+        if: steps.img.outputs.exists == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          provenance: true
+          sbom: true
+          tags: ${{ env.IMG }}:${{ steps.ver.outputs.app }}
+
+      - uses: sigstore/cosign-installer@v3
+        if: steps.img.outputs.exists == 'false'
+
+      - name: Cosign sign (keyless, by digest)
+        if: steps.img.outputs.exists == 'false'
+        run: |
+          DIG=$(docker buildx imagetools inspect "$IMG:${{ steps.ver.outputs.app }}" --format '{{.Manifest.Digest}}')
+          cosign sign --yes "$IMG@$DIG"
+          cosign verify "$IMG@$DIG" \
+            --certificate-identity-regexp='^https://github.com/KeiaiLab/nodevitals/' \
+            --certificate-oidc-issuer=https://token.actions.githubusercontent.com >/dev/null
+          echo "signed $IMG@$DIG"
+
+      - uses: azure/setup-helm@v4
+
+      - name: Push chart (skip if published)
+        run: |
+          if helm show chart "$CHART_OCI/nodevitals" --version "${{ steps.ver.outputs.chart }}" >/dev/null 2>&1; then
+            echo "skip — chart ${{ steps.ver.outputs.chart }} already published"
+          else
+            echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+            helm package deploy/chart --destination /tmp/chart
+            helm push "/tmp/chart/nodevitals-${{ steps.ver.outputs.chart }}.tgz" "$CHART_OCI"
+          fi
+
+      - name: Next step reminder (Artifact Hub)
+        run: |
+          echo "chart ${{ steps.ver.outputs.chart }} published."
+          echo "Artifact Hub exposure = KeiaiLab/charts catalog.yaml 에 이 버전 등록 (fork PR)."
