@@ -51,7 +51,7 @@ git push --force-with-lease origin feat/<slug>    # 자기 fork 브랜치 한정
 
 ## 5. "pipeline" 의 실체 — 로컬 make 게이트 + 브랜치 보호
 
-**nodevitals 는 GitHub Actions 가 없다** (`docs/kb/adr/0002-supply-chain-and-release.md`; keiailab RFC-0002 가 GH Actions 를 영구 금지). 따라서 원격 CI 파이프라인 대신 **머지 게이트 2개**로 품질을 보장한다.
+**릴리스는 GitHub Actions(`release.yml`)가 수행한다** — main 착지 시 Chart.yaml appVersion 기준으로 build→trivy(fail-closed)→ghcr push→cosign keyless 서명→chart push 를 멱등 실행한다. 아래 로컬 make 게이트는 *머지 전* 품질 방벽으로 유지된다. (과거에는 GH Actions 없이 로컬 make + 브랜치 보호 2-게이트만으로 운영했다 — `docs/kb/adr/0002-supply-chain-and-release.md`. 2026-07-22 사용자 결정으로 릴리스만 GHA 파이프라인으로 전환: keyless 서명 근거와 검증 방법은 README "Verifying a release" 참조.)
 
 **(a) 로컬 `make` 게이트** — push/머지 전 실행하며 fail-closed(실패 시 차단):
 

@@ -252,8 +252,19 @@ can produce unattended. The signature is still recorded in Rekor, so public
 auditability is unchanged; what differs is that the certificate binds a key
 rather than a person.
 
-Releases before `0.5.0` were signed keyless and verify with the identity flags
-instead:
+Releases built by the GitHub Actions pipeline (`.github/workflows/release.yml`)
+are signed keyless with the workflow's own OIDC identity — the runner cannot
+reach the private OpenBao, and GitHub's workload issuer is one of the few
+public Fulcio trusts, so this is the unattended path *on hosted CI*:
+
+```bash
+cosign verify ghcr.io/keiailab/nodevitals:<version> \
+  --certificate-identity-regexp='^https://github.com/KeiaiLab/nodevitals/' \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+```
+
+Releases before `0.5.0` were signed keyless by a human login and verify with
+the loose identity flags instead:
 
 ```bash
 cosign verify ghcr.io/keiailab/nodevitals:0.4.0 \
