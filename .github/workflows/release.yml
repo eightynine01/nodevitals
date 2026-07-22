@@ -114,7 +114,9 @@ jobs:
           if helm show chart "$CHART_OCI/nodevitals" --version "${{ steps.ver.outputs.chart }}" >/dev/null 2>&1; then
             echo "skip — chart ${{ steps.ver.outputs.chart }} already published"
           else
-            echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+            # GITHUB_TOKEN packages:write 는 이 repo 소속 패키지 한정 — charts/nodevitals 는 별도 패키지라 403.
+            # PAT secret (GHCR_CHART_TOKEN, write:packages) 필요.
+            echo "${{ secrets.GHCR_CHART_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
             helm package deploy/chart --destination /tmp/chart
             helm push "/tmp/chart/nodevitals-${{ steps.ver.outputs.chart }}.tgz" "$CHART_OCI"
           fi
