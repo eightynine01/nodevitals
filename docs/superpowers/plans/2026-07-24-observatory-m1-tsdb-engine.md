@@ -2661,7 +2661,12 @@ func listSegments(dir string) ([]string, error) {
 		if e.IsDir() {
 			continue
 		}
-		if len(e.Name()) == 8 {
+		// 세그먼트 파일명은 %08d 로만 만들어진다. 8글자 전부가 ASCII 숫자인
+		// 것만 인정한다 — strconv.Atoi 는 "-0000001" 의 선행 부호를 허용해
+		// 남의 파일을 세그먼트로 오인하고, 그 파일이 사전순 맨 앞에 오면
+		// ReplayWAL 의 "손상 시 전체 중단"과 맞물려 후속 세그먼트를 전부
+		// 못 읽는 조용한 데이터 손실이 난다.
+		if len(e.Name()) == 8 && allDigits(e.Name()) {
 			names = append(names, e.Name())
 		}
 	}
@@ -2671,6 +2676,17 @@ func listSegments(dir string) ([]string, error) {
 		out[i] = filepath.Join(dir, n)
 	}
 	return out, nil
+}
+
+// allDigits 는 문자열이 ASCII 숫자로만 이뤄졌는지 본다. strconv.Atoi 와 달리
+// 선행 부호(+/-)나 공백을 허용하지 않는다.
+func allDigits(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return len(s) > 0
 }
 
 func OpenWAL(dir string, segSize int64) (*WAL, error) {
