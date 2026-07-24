@@ -17,7 +17,7 @@
 - **외부 의존 0**: M1 범위에서 `require` 블록은 비어 있어야 한다. 해시는 표준 `hash/fnv`, 비트 연산은 `math/bits` 를 쓴다.
 - **라이선스**: MIT (`LICENSE` 파일, 저작권자 `KEIAILAB`)
 - **아키텍처**: `linux/amd64` 단일. 멀티아키텍처 빌드 금지.
-- **언어**: 코드 식별자·파일명·커밋 type 은 영어, 주석·문서·커밋 본문은 한국어.
+- **언어**: 코드 식별자·파일명·커밋 type 은 영어, 주석·내부 문서·커밋 본문은 한국어. **예외 — 공개 OSS 표면은 영어**: `README.md`, `LICENSE`, GitHub description, ArtifactHub 메타데이터. 자매 repo `KeiaiLab/nodevitals` 와 keiailab OSS 패밀리의 확립된 관례를 따른다 (공개 저장소의 첫 화면은 국제 독자 대상).
 - **커밋**: Conventional Commits (`feat:` `fix:` `test:` `chore:` `docs:`). 각 태스크 마지막 스텝에서 커밋한다.
 - **테스트**: 모든 테스트는 하드웨어·네트워크·시간 의존이 0 이어야 한다. `time.Now()` 를 프로덕션 로직에 쓰지 않고 타임스탬프는 인자로 받는다.
 - **파일 크기**: 한 파일이 400줄을 넘으면 책임이 섞인 신호로 본다.
