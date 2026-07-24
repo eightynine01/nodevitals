@@ -714,6 +714,13 @@ func TestValEncoding_왕복(t *testing.T) {
 		"영":         {0, 0, 0},
 		"단일":        {3.14159},
 		"특수값":       {math.Inf(1), math.Inf(-1), 0, math.MaxFloat64, math.SmallestNonzeroFloat64},
+
+		// +0.0 과 -0.0 은 비트 패턴이 다르다(0x0000… vs 0x8000…). 값 비교로는
+		// 구분되지 않으므로 아래 판정을 비트 비교로 한 것과 짝을 이룬다.
+		"부호있는_영": {0, math.Copysign(0, -1), 0, math.Copysign(0, -1)},
+		// 1.0 과 1.0+2^-52 의 XOR 는 0x1 이라 leading zero 가 63 —
+		// lead >= 32 클램프 분기를 확실히 태운다.
+		"leading_클램프": {1.0, 1.0 + math.Ldexp(1, -52), 1.0},
 	}
 
 	for name, want := range cases {
@@ -731,8 +738,11 @@ func TestValEncoding_왕복(t *testing.T) {
 				if err != nil {
 					t.Fatalf("샘플 %d 디코드 실패: %v", i, err)
 				}
-				if got != w {
-					t.Fatalf("샘플 %d: got %v, want %v", i, got, w)
+				// 비트 단위로 비교한다 — Go/IEEE-754 에서 +0.0 == -0.0 이라
+				// 값 비교로는 부호 있는 0 의 보존을 검증할 수 없다.
+				if math.Float64bits(got) != math.Float64bits(w) {
+					t.Fatalf("샘플 %d: got %v (bits %#016x), want %v (bits %#016x)",
+						i, got, math.Float64bits(got), w, math.Float64bits(w))
 				}
 			}
 		})
